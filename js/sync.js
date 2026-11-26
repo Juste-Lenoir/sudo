@@ -8,7 +8,18 @@ import { connection, cleanUrl, externalize, internalize, dataToBlob, blobToData 
 const STORES = ['ateliers', 'carnet', 'verifs', 'photos', 'chats', 'cards', 'quizzes'];
 // Réglages et progression partagés. Jamais : clés des IA (« ai »), sessions, compteurs propres à l'appareil.
 const KV = ['profile', 'activity', 'daily', 'perf', 'weak', 'goals', 'badges', 'exams', 'plan-done', 'reminders', 'subnet', 'subnet-opt', 'terminal-stats', 'terminal2', 'assistant'];
-export const syncable = (s, id) => STORES.includes(s) || (s === 'kv' && KV.includes(id));
+// Clés des IA : seulement si je l'active (Réglages → Synchronisation), et seulement entre MES appareils
+// (ligne privée de mon compte, protégée par RLS ; jamais dans un groupe).
+let shareKeys = false;
+getKV('sync-ai', false).then(v => { shareKeys = !!v; });
+export const syncable = (s, id) => STORES.includes(s) || (s === 'kv' && (KV.includes(id) || (id === 'ai' && shareKeys)));
+const acceptRemote = (s, id) => syncable(s, id) || (s === 'kv' && id === 'ai'); // un autre de mes appareils les partage
+export const keysShared = () => shareKeys;
+export async function setShareKeys(on) {
+  shareKeys = !!on;
+  await setKV('sync-ai', shareKeys);
+  if (shareKeys && (await get('kv', 'ai'))) await mark('kv', 'ai');
+}
 
 const state = { status: 'off', last: 0, error: '', pending: 0 };
 export const status = () => ({ ...state });
@@ -81,7 +92,7 @@ async function pull(c) {
   for (;;) {
     const rows = await c.select('records', `select=store,rid,data,mtime,deleted,seq&user_id=eq.${c.user.id}&seq=gt.${cursor}&order=seq.asc&limit=50`);
     for (const row of rows) {
-      if (!syncable(row.store, row.rid)) continue;
+      if (!acceptRemote(row.store, row.rid)) continue;
       const id = `r:${row.store}:${row.rid}`;
       const e = await get('sync', id);
       if (e && e.mtime >= row.mtime) continue; // déjà à jour, ou version de cet appareil plus récente
@@ -93,6 +104,13 @@ async function pull(c) {
         if (row.store === 'kv' && row.rid === 'activity' && local?.value) {
           const all = [...new Set([...(local.value || []), ...(data.value || [])])].sort();
           if (all.length > (data.value || []).length) { data.value = all; await putQuiet(row.store, data); await mark('kv', 'activity'); changed.push(row); continue; }
+        }
+        // Clés d'IA : une clé présente ici n'est jamais effacée par un appareil qui n'en a pas.
+        if (row.store === 'kv' && row.rid === 'ai' && local?.value?.providers) {
+          for (const [pid, lp] of Object.entries(local.value.providers)) {
+            const rp = data.value?.providers?.[pid];
+            if (lp.key && rp && !rp.key) { rp.key = lp.key; rp.enabled = lp.enabled; }
+          }
         }
         await putQuiet(row.store, data);
       }

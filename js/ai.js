@@ -20,9 +20,9 @@ export const PROVIDERS = [
     base: 'https://api.mistral.ai/v1', model: 'mistral-small-latest',
     limits: { rpd: 2000 }, reset: 'limite surtout par minute',
     keyUrl: 'https://console.mistral.ai/api-keys', help: 'IA française, offre gratuite « Experiment ». Lit les photos.' },
-  { id: 'ollama', name: 'Ollama', full: 'Ollama (sur ton ordinateur)', type: 'openai', free: true, vision: false, noKey: true,
-    base: 'http://localhost:11434/v1', model: 'llama3.2', limits: {}, reset: 'illimité',
-    keyUrl: 'https://ollama.com/download', help: "Gratuit et hors ligne, mais seulement sur l'ordinateur où Ollama est installé." },
+  { id: 'ollama', name: 'Ollama', full: 'Ollama (IA locale sur ton Mac)', type: 'openai', free: true, vision: true, noKey: true, local: true,
+    base: 'http://localhost:11434/v1', model: 'gemma4:12b', limits: {}, reset: 'illimité',
+    keyUrl: 'https://ollama.com/download', help: "Gratuite, illimitée et hors ligne, mais seulement sur le Mac où Ollama tourne (pas sur l'iPhone). « Lister » montre tes modèles installés." },
   { id: 'anthropic', name: 'Claude', full: 'Claude (Anthropic)', type: 'anthropic', paid: true, vision: true, boxes: true,
     base: 'https://api.anthropic.com/v1', model: 'claude-opus-5-5', priceIn: 4, priceOut: 20, limits: {},
     keyUrl: 'https://console.anthropic.com/settings/keys', help: "Payée à l'usage (séparée de l'abonnement claude.ai). Moins cher : claude-haiku-5-5." },
@@ -55,6 +55,7 @@ export async function getAI() {
     const sp = saved.providers?.[p.id] || {};
     // Modèles retirés par les fournisseurs : on passe au modèle par défaut actuel.
     if (RETIRED.includes(sp.model)) delete sp.model;
+    if (p.id === 'ollama' && sp.model === 'llama3.2') delete sp.model; // ancien défaut, pas installé
     s.providers[p.id] = {
       enabled: !!sp.enabled, key: sp.key || '', model: sp.model || p.model, base: sp.base || p.base,
       priceIn: sp.priceIn ?? p.priceIn ?? 0, priceOut: sp.priceOut ?? p.priceOut ?? 0,
@@ -69,6 +70,10 @@ export async function saveAI(s) {
   await setKV('ai', s);
   window.dispatchEvent(new Event('ai-changed'));
 }
+// Clés reçues d'un autre de mes appareils (synchronisation) : on relit les réglages.
+window.addEventListener('sudo:changed', e => {
+  if (e.detail.some(x => x.store === 'kv' && x.id === 'ai')) { cache = null; window.dispatchEvent(new Event('ai-changed')); }
+});
 export const readyProviders = s => PROVIDERS.filter(p => { const c = s.providers[p.id]; return c.enabled && (p.noKey || c.key); });
 
 // ---------- Suivi de consommation (par jour, 35 jours gardés) ----------
@@ -93,10 +98,30 @@ async function addUsage(id, inT, outT, rl) {
 export function todayOf(u, id) {
   return u.days[dayKey()]?.[id] || { req: 0, inT: 0, outT: 0 };
 }
+// Quota refusé par le fournisseur (429) : le compteur passe à 0 jusqu'à la remise à zéro (par jour)
+// ou pendant une minute (limite par minute). Nos estimations ne valent pas la réponse du fournisseur.
+const nextReset = id => {
+  const d = new Date();
+  if (id === 'gemini') { d.setHours(9, 0, 0, 0); if (d <= new Date()) d.setDate(d.getDate() + 1); return +d; } // minuit Pacifique ≈ 9 h
+  d.setHours(24, 0, 0, 0); return +d;
+};
+export async function markQuota(id, msg) {
+  const daily = /per ?day|daily|PerDay|quota.*exceeded.*day|RPD/i.test(msg || '');
+  const u = await getUsage();
+  u.blocked ||= {};
+  u.blocked[id] = { until: daily ? nextReset(id) : Date.now() + 65e3, daily };
+  await setKV('usage2', u);
+  window.dispatchEvent(new Event('usage-changed'));
+  return daily;
+}
+const blockedOf = (u, id) => { const b = u.blocked?.[id]; return b && b.until > Date.now() ? b : null; };
+
 // Part restante aujourd'hui (0 à 1), d'après le fournisseur s'il le dit, sinon nos compteurs.
 export function remaining(s, u, id) {
   const p = P(id), c = s.providers[id];
   if (!p || p.paid || id === 'ollama') return { ratio: 1, exact: true, label: id === 'ollama' ? 'illimité' : 'payant' };
+  const b = blockedOf(u, id);
+  if (b) return { ratio: 0, exact: true, left: 0, limit: c.rpd, blocked: b };
   const rl = u.rl[id];
   if (rl && rl.limit && Date.now() - rl.at < 6 * 3600e3 && dayKey(new Date(rl.at)) === dayKey()) {
     return { ratio: Math.max(0, rl.remaining / rl.limit), exact: true, left: rl.remaining, limit: rl.limit };
@@ -300,8 +325,11 @@ export async function callOne(id, { system, messages, onDelta = () => {}, signal
     } catch (e) {
       if (slow && !signal?.aborted) { e = Object.assign(new Error(`${model} ne répond pas (surchargé ?)`), { status: 504 }); }
       if ([503, 504].includes(e.status)) markSlow(model);
-      if (got || k === models.length - 1 || ![404, 500, 503, 504].includes(e.status)) throw e;
-      window.dispatchEvent(new CustomEvent('ai-info', { detail: `${p.name} : ${model} ${e.status === 404 ? 'indisponible' : 'surchargé'}, j'essaie ${models[k + 1]}` }));
+      // Chaque modèle Gemini a son propre quota : un 429 sur l'un n'empêche pas l'autre.
+      const retry = [404, 500, 503, 504].includes(e.status) || (e.status === 429 && p.type === 'gemini');
+      if (got || k === models.length - 1 || !retry) throw e;
+      window.dispatchEvent(new CustomEvent('ai-info', { detail: `${p.name} : ${model} ${e.status === 404 ? 'indisponible' : e.status === 429 ? 'quota atteint' : 'surchargé'}, j'essaie ${models[k + 1]}` }));
+      if (e.status === 503) await new Promise(r => setTimeout(r, 800));
     } finally {
       clearTimeout(timer);
       signal?.removeEventListener('abort', onAbort);
@@ -334,7 +362,7 @@ export async function chat({ system, messages, onDelta = () => {}, onInfo = () =
   const errors = [];
   for (const p of list) {
     if (p.paid && overBudget) { errors.push(`${p.name} : budget mensuel atteint`); continue; }
-    if (!p.paid && remaining(s, u, p.id).ratio <= 0 && list.length > 1 && p !== list[list.length - 1]) { errors.push(`${p.name} : quota du jour épuisé`); continue; }
+    if (!p.paid && remaining(s, u, p.id).ratio <= 0 && list.length > 1 && p !== list[list.length - 1]) { errors.push(`${p.name} : ${remaining(s, u, p.id).blocked?.daily === false ? "trop de demandes à la minute" : "quota du jour épuisé"}`); continue; }
     let got = '';
     try {
       const r = await callOne(p.id, { system, messages, signal, onDelta: t => { got += t; onDelta(t); } });
@@ -345,7 +373,8 @@ export async function chat({ system, messages, onDelta = () => {}, onInfo = () =
         throw e;
       }
       if (got) return { text: got + '\n\n_Réponse interrompue (' + e.message + ')_', provider: p.id, providerName: p.name };
-      const msg = e instanceof TypeError ? 'connexion impossible (réseau ou Ollama non lancé)' : e.message;
+      let msg = e instanceof TypeError ? (p.local ? 'Ollama injoignable (pas lancé, ou pas sur cet appareil)' : 'connexion impossible (réseau)') : e.message;
+      if (e.status === 429) msg = (await markQuota(p.id, e.message)) ? 'quota du jour épuisé' : 'trop de demandes à la minute';
       errors.push(`${p.name} : ${msg}`);
       if (list.indexOf(p) < list.length - 1) {
         onInfo(`${p.name} ne répond pas, je passe à une autre IA`);

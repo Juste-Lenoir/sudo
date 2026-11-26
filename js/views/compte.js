@@ -1,5 +1,5 @@
 // Synchronisation : guide pas à pas pour créer le projet Supabase gratuit, connexion par code e-mail, état.
-import { config, saveConfig, conn, status, syncNow, disconnect } from '../sync.js';
+import { config, saveConfig, conn, status, syncNow, disconnect, keysShared, setShareKeys } from '../sync.js';
 
 // Lien de connexion collé sur un appareil pas encore configuré : il contient l'adresse du projet et sa clé publique.
 async function loginWithLink(link) {
@@ -64,7 +64,7 @@ export async function compteView(v) {
       <div class="card stack">
         <h2 style="margin:0">Ce qui se synchronise</h2>
         <p class="small" style="margin:0">Ateliers, carnet, flashcards, quiz, vérifications, photos, progression, examens et planning.</p>
-        <p class="small muted" style="margin:0">Restent sur chaque appareil : tes <b>clés d’IA</b> (jamais envoyées), les compteurs de quota et les rappels déjà envoyés. Sans réseau, tout continue de marcher : les changements partent au retour de la connexion. Si le même élément est modifié sur deux appareils, la version la plus récente gagne.</p>
+        <p class="small muted" style="margin:0">Restent sur chaque appareil : tes <b>clés d’IA</b> (sauf si tu actives leur partage plus bas), les compteurs de quota et les rappels déjà envoyés. Sans réseau, tout continue de marcher : les changements partent au retour de la connexion. Si le même élément est modifié sur deux appareils, la version la plus récente gagne.</p>
       </div>
       <div class="card stack">
         <h2 style="margin:0">Photos du téléphone vers l’ordinateur</h2>
@@ -74,6 +74,9 @@ export async function compteView(v) {
         <h2 style="margin:0">Autre appareil</h2>
         <p class="small muted" style="margin:0">Ouvre sudo sur l’autre appareil → Réglages → Synchronisation, colle la même adresse et la même clé, puis connecte-toi avec ${esc(user.email)}.</p>
         <div class="row"><button class="btn sm" data-cp="${esc(cfg.url)}">${icon('copy')}Copier l’adresse</button><button class="btn sm" data-cp="${esc(cfg.key)}">${icon('copy')}Copier la clé publique</button></div>
+      </div>
+      <div class="card stack">
+        <label class="row" style="cursor:pointer;align-items:flex-start"><span class="grow"><strong>Partager mes clés d’IA entre mes appareils</strong><span class="small muted" style="display:block;margin-top:4px">Entre en une fois tes clés Gemini, Groq… et retrouve-les sur l’iPhone : la bascule vers une autre IA y marche alors comme sur le Mac. Les clés sont rangées dans ton compte privé, jamais partagées dans un groupe. À activer sur l’appareil qui a toutes les clés.</span></span><span class="switch"><input type="checkbox" data-sharekeys ${keysShared() ? 'checked' : ''} aria-label="Partager mes clés d’IA"><span></span></span></label>
       </div>
       <form class="card stack" data-pwform>
         <h2 style="margin:0">Mot de passe sudo</h2>
@@ -181,6 +184,11 @@ export async function compteView(v) {
     btn.disabled = true; err.textContent = '';
     try { await c.signInPassword(em, pw); toast('Connecté : synchronisation en cours'); await syncNow(); compteView(v); }
     catch (x) { err.textContent = x.message; btn.disabled = false; }
+  });
+  $('[data-sharekeys]', v)?.addEventListener('change', async e => {
+    await setShareKeys(e.target.checked);
+    toast(e.target.checked ? 'Clés partagées : elles arrivent sur tes autres appareils à la prochaine synchro' : 'Les clés ne sont plus envoyées');
+    syncNow();
   });
   $('[data-pwform]', v)?.addEventListener('submit', async e => {
     e.preventDefault();

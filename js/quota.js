@@ -53,7 +53,8 @@ export async function openQuota() {
     return `<div class="card stack">
       <div class="row"><strong>${esc(p.full)}</strong><span class="grow"></span>${p.paid || pid === 'ollama' ? '' : `<span class="tag ${level(r.ratio) === 'low' ? 'bad' : level(r.ratio) === 'mid' ? 'mid' : 'ok'}">${r.exact ? '' : '~'}${pct(r.ratio)} restant</span>`}</div>
       ${p.paid || pid === 'ollama' ? '' : `<div class="meter ${level(r.ratio)}"><i style="width:${pct(r.ratio)}"></i></div>`}
-      <div class="small muted">Aujourd'hui : ${t.req} requête${t.req > 1 ? 's' : ''} · ~${Math.round((t.inT + t.outT) / 1000)} k tokens · limite ${esc(limit)}${r.exact ? ' (donnée par le fournisseur)' : ' (estimation)'}</div>
+      <div class="small muted">Aujourd'hui : ${t.req} requête${t.req > 1 ? 's' : ''} · ~${Math.round((t.inT + t.outT) / 1000)} k tokens · ${r.blocked ? 'limite atteinte' : `limite ${esc(limit)}${r.exact ? ' (donnée par le fournisseur)' : ' (estimation)'}`}</div>
+      ${r.blocked ? `<div class="small" style="color:var(--err)">${r.blocked.daily ? 'Quota du jour épuisé selon ' + esc(p.name) : 'Trop de demandes à la minute'} : en pause jusqu'à ${new Date(r.blocked.until).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}. sudo utilise une autre IA en attendant.</div>` : ''}
       <div class="small muted">Remise à zéro : ${esc(p.reset || '?')}</div>
       <div class="label" style="margin:6px 0 0">Semaine précédente</div>
       ${weekBars(u, pid)}
