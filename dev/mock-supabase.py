@@ -31,7 +31,7 @@ class H(BaseHTTPRequestHandler):
     def cors(self):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Headers', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS')
     def out(self, code, body=None, raw=None, ctype='application/json'):
         self.send_response(code); self.cors()
         data = raw if raw is not None else (b'' if body is None else json.dumps(body).encode())
@@ -52,6 +52,7 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self): self.route('POST')
     def do_PATCH(self): self.route('PATCH')
     def do_DELETE(self): self.route('DELETE')
+    def do_PUT(self): self.route('PUT')
 
     def route(self, m):
         if self.headers.get('apikey') != KEY: return self.err(401, 'Invalid API key')
@@ -85,6 +86,14 @@ class H(BaseHTTPRequestHandler):
         if ep == 'signup':
             u = {'id': str(uuid.uuid4()), 'email': '', 'is_anonymous': True}; users[u['id']] = u
             return self.out(200, new_session(u))
+        if ep.startswith('token') and 'password' in self.path:
+            b = self.jbody(); u = next((x for x in users.values() if x['email'] == (b.get('email') or '').lower()), None)
+            if not u or u.get('pw') != b.get('password'): return self.err(400, 'Invalid login credentials')
+            return self.out(200, new_session(u))
+        if ep == 'user' and m == 'PUT':
+            u = self.user()
+            if not u: return self.err(401, 'invalid JWT')
+            u['pw'] = self.jbody().get('password'); return self.out(200, u)
         if ep == 'token':
             b = self.jbody(); uid = refresh.pop(b.get('refresh_token'), None)
             if not uid: return self.err(400, 'Invalid Refresh Token')

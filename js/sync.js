@@ -17,7 +17,11 @@ function set(p) { Object.assign(state, p); emit(); }
 
 // ---- Configuration (adresse du projet + clé publique) ----
 let cfg;
-export async function config() { if (cfg === undefined) cfg = await getKV('cloud', null); return cfg; }
+// Projet de Juste (publié sur GitHub Pages) : connu d'avance, rien à coller sur un nouvel appareil.
+// La clé « publishable » est publique par conception ; la sécurité vient des règles RLS.
+const DEFAULT = location.hostname === 'juste-lenoir.github.io'
+  ? { url: 'https://gcrzgegfrapwtqgcbdri.supabase.co', key: 'sb_publishable_5Q5cc0pYVAtF3wkgtJOEow_wXvOAgdo' } : null;
+export async function config() { if (cfg === undefined) cfg = await getKV('cloud', DEFAULT); return cfg; }
 export async function saveConfig(url, key) {
   cfg = url && key ? { url: cleanUrl(url), key: key.trim() } : null;
   await setKV('cloud', cfg);

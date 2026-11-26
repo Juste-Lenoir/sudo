@@ -116,6 +116,13 @@ class Conn {
     await this.setSession(s);
     return this.user;
   }
+  // Mot de passe : défini une fois sur un appareil connecté, il connecte les autres sans e-mail.
+  async signInPassword(email, password) {
+    const s = await this.raw('/auth/v1/token?grant_type=password', { method: 'POST', auth: false, body: { email, password } });
+    await this.setSession(s);
+    return this.user;
+  }
+  async setPassword(password) { await this.req('/auth/v1/user', { method: 'PUT', body: { password } }); }
   async signOut() {
     try { await this.req('/auth/v1/logout', { method: 'POST' }); } catch { /* hors ligne : on oublie quand même */ }
     await this.setSession(null);
@@ -145,6 +152,9 @@ class Conn {
 function frMsg(m, status) {
   const s = String(m || '');
   if (/rate limit|too many|security purposes/i.test(s)) return 'Trop de demandes : attends quelques minutes (limite d’envoi d’e-mails de Supabase).';
+  if (/invalid login credentials/i.test(s)) return 'E-mail ou mot de passe incorrect.';
+  if (/password should be|weak/i.test(s)) return 'Mot de passe trop faible : au moins 8 caractères, avec lettres et chiffres.';
+  if (/same.*password|different from the old/i.test(s)) return 'C’est déjà ton mot de passe actuel.';
   if (/expired|invalid/i.test(s) && /token|otp/i.test(s)) return 'Code incorrect ou expiré : redemande un code.';
   if (/anonymous sign-ins are disabled/i.test(s)) return 'Les comptes invités ne sont pas activés sur ce projet (Authentication → Sign In / Providers → Allow anonymous sign-ins).';
   if (/relation .* does not exist|Could not find the table|schema cache/i.test(s)) return 'Les tables n’existent pas : lance le script supabase.sql dans le SQL Editor.';

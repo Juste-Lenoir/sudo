@@ -75,13 +75,23 @@ export async function compteView(v) {
         <p class="small muted" style="margin:0">Ouvre sudo sur l’autre appareil → Réglages → Synchronisation, colle la même adresse et la même clé, puis connecte-toi avec ${esc(user.email)}.</p>
         <div class="row"><button class="btn sm" data-cp="${esc(cfg.url)}">${icon('copy')}Copier l’adresse</button><button class="btn sm" data-cp="${esc(cfg.key)}">${icon('copy')}Copier la clé publique</button></div>
       </div>
+      <form class="card stack" data-pwform>
+        <h2 style="margin:0">Mot de passe sudo</h2>
+        <p class="small muted" style="margin:0">Pour connecter tes autres appareils <b>sans e-mail</b> : choisis un mot de passe ici, puis sur l’autre appareil, connecte-toi avec ${esc(user.email)} et ce mot de passe.</p>
+        <input type="email" value="${esc(user.email)}" autocomplete="username" hidden>
+        <label class="field">Nouveau mot de passe<input class="input" type="password" name="pw" minlength="8" required autocomplete="new-password"></label>
+        <div class="small" data-pwerr style="color:var(--err)"></div>
+        <button class="btn" type="submit" style="align-self:flex-start">Enregistrer le mot de passe</button>
+      </form>
       <button class="btn danger" data-out style="align-self:flex-start">Se déconnecter de cet appareil</button>`
       : cfg ? `
       <div class="card stack" data-login>
         <h2 style="margin:0">Connexion</h2>
-        <p class="small muted" style="margin:0">Pas de mot de passe : tu reçois un lien de connexion par e-mail.</p>
-        <label class="field">Ton e-mail<input class="input" type="email" data-email autocomplete="email" placeholder="toi@exemple.fr"></label>
-        <button class="btn primary" data-send>Recevoir l’e-mail de connexion</button>
+        <label class="field">Ton e-mail<input class="input" type="email" data-email autocomplete="username" placeholder="toi@exemple.fr"></label>
+        <label class="field">Mot de passe sudo<input class="input" type="password" data-pw autocomplete="current-password" placeholder="ton mot de passe sudo"></label>
+        <button class="btn primary" data-pwlogin>Se connecter</button>
+        <p class="small muted" style="margin:0">Pas encore de mot de passe (premier appareil) ? Reçois plutôt un lien par e-mail, puis choisis ton mot de passe une fois connecté.</p>
+        <button class="btn" data-send>Recevoir l’e-mail de connexion</button>
         <div class="stack" data-codebox hidden>
           <ol class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
             <li>Ouvre l’e-mail de <b>Supabase Auth</b> (« Your sign-in link », ou « Confirm your signup » la première fois). Regarde aussi les spams.</li>
@@ -163,6 +173,20 @@ export async function compteView(v) {
     btn.disabled = true; err.textContent = '';
     try { await c.verifyCode(email, code); toast('Connecté : synchronisation en cours'); await syncNow(); compteView(v); }
     catch (x) { err.textContent = x.message; btn.disabled = false; }
+  });
+  $('[data-pwlogin]', v)?.addEventListener('click', async e => {
+    const btn = e.currentTarget, err = $('[data-err]', v);
+    const em = $('[data-email]', v).value.trim(), pw = $('[data-pw]', v).value;
+    if (!em || !pw) { err.textContent = 'Remplis ton e-mail et ton mot de passe.'; return; }
+    btn.disabled = true; err.textContent = '';
+    try { await c.signInPassword(em, pw); toast('Connecté : synchronisation en cours'); await syncNow(); compteView(v); }
+    catch (x) { err.textContent = x.message; btn.disabled = false; }
+  });
+  $('[data-pwform]', v)?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const err = $('[data-pwerr]', v), pw = new FormData(e.target).get('pw');
+    try { await c.setPassword(pw); e.target.reset(); err.textContent = ''; toast('Mot de passe enregistré : utilise-le sur tes autres appareils'); }
+    catch (x) { err.textContent = x.message; }
   });
   $('[data-vlink]', v)?.addEventListener('click', async e => {
     const btn = e.currentTarget, err = $('[data-err]', v);
