@@ -63,8 +63,54 @@ const QQCM = { questions: [
 
 const reply = (text, extra = '') => text + extra;
 
+// ---------- Phase 2 : quiz, flashcards, terminal ----------
+const QUIZ = { titre: 'VLAN, DHCP et modes réseau', questions: [
+  { q: 'Quelle commande Cisco affiche la liste des VLAN et de leurs ports ?', choix: ['show vlan brief', 'show ip route', 'show interfaces trunk', 'show running-config vlan'], bonne: 0, explication: '`show vlan brief` liste chaque VLAN avec ses ports en mode accès.', notion: 'Vérifier les VLAN', illustration: null },
+  { q: 'Dans cette topologie, pourquoi PC2 ne joint-il pas PC1 ?', choix: ['Le câble est croisé', 'Ils sont dans deux VLAN différents sans routeur', 'Le switch est éteint', 'PC2 n’a pas d’adresse MAC'], bonne: 1, explication: 'Deux VLAN = deux réseaux séparés : il faut un routeur (ou un switch de niveau 3) pour passer de l’un à l’autre.', notion: 'Isolation des VLAN',
+    illustration: { type: 'schema', contenu: 'flowchart LR\n  pc1["PC1 · VLAN 10\\n192.168.10.5"] --- sw["Switch 2960"]\n  pc2["PC2 · VLAN 20\\n192.168.20.5"] --- sw', legende: 'Où est le problème ?' } },
+  { q: 'D’après cette sortie, quelle est la passerelle de la VM ?', choix: ['192.168.150.128', '255.255.255.0', '192.168.150.2', '192.168.150.255'], bonne: 2, explication: 'La ligne **Default Gateway** donne la passerelle : en NAT VMware, c’est l’adresse en .2.', notion: 'Lire ipconfig',
+    illustration: { type: 'sortie', contenu: 'Carte Ethernet Ethernet0 :\n   Adresse IPv4. . . . . . . . . . . . . .: 192.168.150.128\n   Masque de sous-réseau. . . . . . . . . : 255.255.255.0\n   Passerelle par défaut. . . . . . . . . : 192.168.150.2', legende: 'ipconfig dans la VM 2' } },
+  { q: 'Quel connecteur alimente la carte mère ?', choix: ['EPS 8-pin', 'ATX 24-pin', 'SATA power', 'PCIe 6+2'], bonne: 1, explication: 'Le gros connecteur **ATX 24-pin** alimente la carte mère ; l’EPS 8-pin alimente le processeur.', notion: 'Connecteurs d’alimentation',
+    illustration: { type: 'photo', contenu: 'ATX 24-pin power connector', legende: 'Connecteur d’alimentation' } },
+  { q: 'Un PC obtient l’adresse 169.254.12.7. Que s’est-il passé ?', choix: ['Il a une IP fixe', 'Le DHCP n’a pas répondu (APIPA)', 'Il est en NAT', 'Il est dans le VLAN 169'], bonne: 1, explication: 'Une adresse en 169.254.x.x (APIPA) signifie que le PC n’a pas trouvé de serveur DHCP.', notion: 'APIPA', illustration: null },
+] };
+const CARDS = { cartes: [
+  { recto: 'Commande Cisco pour voir les VLAN et leurs ports ?', verso: '`show vlan brief`', domaine: 'reseau', illustration: null },
+  { recto: 'Mode réseau VMware où la VM est vue comme un vrai PC du réseau ?', verso: '**Bridged** (pont) : IP donnée par la box.', domaine: 'virtu', illustration: null },
+  { recto: 'Passerelle habituelle d’une VM en NAT dans VMware ?', verso: 'L’adresse en **.2** du réseau VMnet8 (ex. 192.168.150.2).', domaine: 'virtu', illustration: { type: 'schema', contenu: 'flowchart LR\n  vm["VM · NAT"] --- nat["Routeur NAT .2"] --- pc["PC hôte"] --- box["Box"]', legende: '' } },
+  { recto: 'Commande Linux : IP puis passerelle en une ligne ?', verso: '`ip a && ip route`', domaine: 'linux', illustration: null },
+  { recto: 'Que signifie une adresse 169.254.x.x ?', verso: 'APIPA : le DHCP n’a pas répondu.', domaine: 'reseau', illustration: null },
+] };
+
+function terminalAnswer(sys, msgs) {
+  const cmd = (msgs[msgs.length - 1]?.text || '').trim();
+  const start = (sys.match(/Invite de départ : (.+)$/m) || [, 'Router>'])[1].trim();
+  const prev = [...msgs].reverse().find(m => m.role === 'assistant' && /[#>$%]\s*$/.test(m.text.trim()));
+  const pr = prev ? prev.text.trim().split('\n').pop() : start;
+  const host = (pr.match(/^([\w-]+)/) || [, 'Router'])[1];
+  if (cmd.startsWith('@mission')) return `[MISSION]\n### Mission : VLAN pour deux services\nLa PME a deux services, **Compta** et **RH**.\n1. Crée le VLAN 10 « COMPTA » et le VLAN 20 « RH ».\n2. Place Fa0/1-5 dans le VLAN 10 et Fa0/6-10 dans le VLAN 20.\n3. Vérifie avec une seule commande.\n\n**Réussite** : chaque port est dans le bon VLAN.\n\n${pr}`;
+  if (cmd.startsWith('@verifier')) return '[PROF]\n- ✅ Mode privilégié et configuration globale maîtrisés\n- ✅ Nom de l’équipement changé\n- ❌ Mot de passe chiffré (enable secret) absent\n- ❌ Configuration non enregistrée (copy run start)\n\nPlus simple : `wr` enregistre en 2 lettres.\n\nNOTE : 12/20';
+  if (cmd.startsWith('@prof')) return '[PROF] Piste : sur Cisco, tout se configure depuis le mode **configuration globale**. Quelle commande y mène depuis `Router#` ? Indice : elle commence par `conf`.';
+  if (start.includes('Router') || start.includes('Switch')) {
+    if (/^en(able)?$/i.test(cmd)) return pr.replace(/>$/, '#');
+    if (/^conf(igure)?( t(erminal)?)?$/i.test(cmd)) return 'Enter configuration commands, one per line.  End with CNTL/Z.\n' + host + '(config)#';
+    const h = cmd.match(/^hostname\s+(\S+)/i);
+    if (h) return h[1] + '(config)#';
+    if (/^(end|exit)$/i.test(cmd)) return host + '#';
+    if (/^(sh(ow)? ip int(erface)? br(ief)?)$/i.test(cmd)) return 'Interface              IP-Address      OK? Method Status                Protocol\nGigabitEthernet0/0/0   unassigned      YES unset  administratively down down\nGigabitEthernet0/0/1   unassigned      YES unset  administratively down down\n' + pr;
+    if (cmd === '?') return 'Exec commands:\n  configure  Enter configuration mode\n  enable     Turn on privileged commands\n  ping       Send echo messages\n  show       Show running system information\n' + pr;
+    return `${' '.repeat(pr.length + 1)}^\n% Invalid input detected at '^' marker.\n\n${pr}`;
+  }
+  if (/^ip a/.test(cmd)) return '1: lo: <LOOPBACK,UP> mtu 65536\n    inet 127.0.0.1/8 scope host lo\n2: ens33: <BROADCAST,MULTICAST,UP> mtu 1500\n    inet 192.168.1.50/24 brd 192.168.1.255 scope global dynamic ens33\n' + pr;
+  if (/^ipconfig/i.test(cmd)) return 'Carte Ethernet Ethernet :\n   Adresse IPv4. . . . . . . . . . . . . .: 192.168.1.47\n   Masque de sous-réseau. . . . . . . . . : 255.255.255.0\n   Passerelle par défaut. . . . . . . . . : 192.168.1.1\n\n' + pr;
+  return `${cmd.split(' ')[0]}: command not found\n${pr}`;
+}
+
 function answer(sys, msgs) {
   const last = msgs[msgs.length - 1]?.text || '';
+  if (sys.includes('Tu simules de façon réaliste')) return terminalAnswer(sys, msgs);
+  if (last.includes('Crée un quiz QCM')) return JSON.stringify(QUIZ);
+  if (last.includes('Crée des flashcards')) return JSON.stringify(CARDS);
   if (last.includes('Transforme cette consigne')) return JSON.stringify(ANALYSE);
   if (last.includes('PREMIÈRE image')) return JSON.stringify(PHOTO);
   if (last.includes('Crée ') && last.includes('questions')) return JSON.stringify(last.includes('choix multiples') ? QQCM : QOPEN);

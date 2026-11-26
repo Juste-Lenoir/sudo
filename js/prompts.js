@@ -229,3 +229,57 @@ export const MODES = {
 export function formateurSystem(prof, mode, dom) {
   return `${base(prof)}\n\nDomaine de travail : ${domain(dom).name}.\n${MODES[mode].rule}`;
 }
+
+// ---------- Illustrations (quiz, flashcards) ----------
+const ILLUS = `"illustration" (facultatif, sinon null) : {"type": "schema" | "sortie" | "photo", "contenu": "...", "legende": "courte"}
+- "schema" : code Mermaid court et valide (flowchart LR ou TD, libellés courts entre guillemets, sans style) : topologie (routeurs, switchs, PC, VLAN, adresses IP), principe (OSI, DHCP, DNS, AD), organigramme de dépannage, arborescence. Idéal pour « que montre ce schéma ? » ou « où est l'erreur dans cette topologie ? ».
+- "sortie" : sortie de commande réaliste à analyser (ipconfig, ip a, show ip interface brief, show vlan brief, Get-NetIPConfiguration…), texte brut.
+- "photo" : UNIQUEMENT pour du matériel réel (composant de PC, connecteur, câble, port, équipement) : 2 à 5 mots-clés EN ANGLAIS pour chercher une photo libre sur Wikimedia Commons (ex. "ATX 24-pin connector", "RJ45 crossover cable", "Cisco 2960 switch"). La question doit rester compréhensible si la photo ne s'affiche pas.`;
+
+// ---------- Quiz ----------
+export function quizPrompt({ sujet, dom, fiches = '', n = 10, niveau = 'moyen', weak = [] }) {
+  return `Crée un quiz QCM pour un apprenant en formation « ${FORMATION} ».
+${sujet ? `Sujet : ${sujet}\n` : ''}Domaine : ${domain(dom).name}
+Niveau : ${niveau}
+${fiches ? `Base-toi UNIQUEMENT sur ces fiches de son carnet :\n"""\n${fiches.slice(0, 9000)}\n"""\n` : ''}${weak.length ? `Ses points faibles connus (insiste dessus, reformulés) :\n${weak.map(w => '- ' + w).join('\n')}\n` : ''}
+${n} questions, de la plus simple à la plus exigeante, variées : notion, commande (à quoi sert, quelle option), analyse d'une sortie de commande, dépannage, « où est l'erreur », cas d'entreprise. 4 choix, une seule bonne réponse, mauvaises réponses plausibles (pas absurdes). Termes techniques en anglais comme dans les logiciels, avec le français si utile. Uniquement des informations fiables et vérifiables.
+Illustre environ une question sur trois avec le champ ${ILLUS}
+Réponds UNIQUEMENT en JSON :
+{"titre": "titre court du quiz", "questions": [{"q": "question", "choix": ["A", "B", "C", "D"], "bonne": 0, "explication": "pourquoi c'est la bonne réponse, 1 à 3 phrases", "notion": "la notion testée en 2 à 5 mots", "illustration": null}]}
+« bonne » est l'index (0 à 3) ; répartis-le sur les 4 positions.`;
+}
+
+// ---------- Flashcards ----------
+export function flashcardsPrompt({ source, dom, n = 12 }) {
+  return `Crée des flashcards de révision (répétition espacée) pour un apprenant en formation « ${FORMATION} », à partir de ce contenu :
+"""
+${source.slice(0, 10000)}
+"""
+Domaine principal : ${domain(dom).name}
+Environ ${n} cartes. Une seule notion par carte. Recto : une question courte et précise (commande, notion, valeur, différence, « à quoi sert… »). Verso : la réponse en 1 à 3 lignes, avec la commande exacte entre \`backticks\` si besoin. Termes techniques en anglais. Pas de doublon, uniquement des informations fiables.
+Illustre quelques cartes (pas plus d'une sur quatre) quand ça aide vraiment, avec le champ ${ILLUS}
+Réponds UNIQUEMENT en JSON :
+{"cartes": [{"recto": "...", "verso": "...", "domaine": "un parmi : ${DOMAINS.map(d => d.id).join(', ')}", "illustration": null}]}`;
+}
+
+// ---------- Terminal simulé ----------
+export const DEVICES = {
+  'cisco-routeur': { label: 'Routeur Cisco', short: 'Routeur', prompt: 'Router>', lang: 'cisco', dom: 'reseau', desc: 'un routeur Cisco ISR 4321 sous IOS XE, configuration d’usine (interfaces GigabitEthernet0/0/0 et 0/0/1, éteintes)' },
+  'cisco-switch': { label: 'Switch Cisco', short: 'Switch', prompt: 'Switch>', lang: 'cisco', dom: 'reseau', desc: 'un switch Cisco Catalyst 2960 sous IOS 15, configuration d’usine (24 ports FastEthernet0/1 à 0/24, 2 ports GigabitEthernet0/1-2, tout dans le VLAN 1)' },
+  linux: { label: 'Linux (Debian)', short: 'Linux', prompt: 'etudiant@srv-debian:~$', lang: 'bash', dom: 'linux', desc: 'un serveur Debian 12 sans interface graphique, carte ens33 en DHCP (192.168.1.50/24, passerelle 192.168.1.1), utilisateur « etudiant » membre de sudo' },
+  powershell: { label: 'PowerShell', short: 'PowerShell', prompt: 'PS C:\\Users\\Administrateur>', lang: 'powershell', dom: 'winserver', desc: 'un Windows Server 2022 en PowerShell administrateur, nom SRV01, groupe de travail, carte « Ethernet0 » en DHCP (192.168.1.60/24)' },
+  cmd: { label: 'CMD Windows', short: 'CMD', prompt: 'C:\\Users\\Etudiant>', lang: 'cmd', dom: 'windows', desc: 'un PC Windows 11 Pro en invite de commandes (cmd.exe), utilisateur Etudiant, carte « Ethernet » en DHCP (192.168.1.47/24, passerelle 192.168.1.1)' },
+  macos: { label: 'macOS', short: 'macOS', prompt: 'etudiant@MacBook-Pro ~ %', lang: 'bash', dom: 'macos', desc: 'un MacBook Pro sous macOS récent, Terminal zsh, utilisateur administrateur « etudiant », Wi-Fi en0 (192.168.1.33/24)' },
+};
+
+export function terminalSystem(dev, mission) {
+  const d = DEVICES[dev];
+  return `Tu simules de façon réaliste ${d.desc}. L'apprenant tape des commandes comme sur le vrai équipement.
+RÈGLES STRICTES :
+1. Pour une commande normale : réponds UNIQUEMENT avec la sortie exacte que produirait l'équipement (texte brut, sans Markdown, sans explication), y compris les messages d'erreur réalistes (« % Invalid input detected at '^' marker. », « command not found »…). Accepte les abréviations Cisco (conf t, sh ip int br, no shut). Garde un état cohérent (configuration, fichiers, interfaces, modes, dossier courant) pendant toute la session.
+2. La DERNIÈRE ligne de ta réponse est toujours l'invite de commande actuelle (ex. « R1(config-if)# », « etudiant@srv-debian:/etc$ »), sans rien après.
+3. Si le message commence par « @prof » : tu sors du rôle. Commence par « [PROF] » puis réponds en formateur, en français, en Markdown, brièvement : pistes et méthode la plus simple plutôt que la solution complète, sauf si l'apprenant la demande. Termes techniques en anglais. Pas d'invite à la fin.
+4. Si le message commence par « @mission » : commence par « [MISSION] » puis propose une mission pratique réaliste et progressive pour cet équipement (contexte, objectifs numérotés, critères de réussite), en Markdown, sans donner les commandes. Puis une ligne vide et l'invite actuelle.
+5. Si le message commence par « @verifier » : commence par « [PROF] » puis vérifie l'état RÉEL de l'équipement (d'après les commandes réellement tapées) par rapport à la mission : chaque objectif atteint ✅ ou manquant ❌, ce qui aurait pu être plus simple, et termine par une ligne exacte « NOTE : x/20 ». Pas d'invite à la fin.
+${mission ? `\nMISSION EN COURS :\n${mission}\n` : ''}Invite de départ : ${d.prompt}`;
+}

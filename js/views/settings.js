@@ -2,10 +2,13 @@
 import { getProfile, saveProfile, exportAll, importAll, clearAll } from '../store.js';
 import { PROVIDERS, TASKS, getAI, saveAI, readyProviders, testProvider, listModels } from '../ai.js';
 import { $, esc, toast, icon, download, paintIcons } from '../ui.js';
+import { account, status } from '../sync.js';
+import { stText } from './compte.js';
 
 export async function settingsView(v) {
   const prof = await getProfile();
   const s = await getAI();
+  const acc = await account();
 
   const provCard = p => {
     const c = s.providers[p.id];
@@ -60,15 +63,19 @@ export async function settingsView(v) {
         <label class="field">Budget mensuel pour les IA payantes ($)<input class="input mono" type="number" min="0" step="1" data-budget value="${s.budget}"></label>
       </div>
 
+      <a class="card row" href="#/compte" style="text-decoration:none;color:inherit">
+        ${icon('cloud')}<div class="grow"><strong>Synchronisation</strong><div class="small muted">${acc ? esc(acc.email) + ' · ' + esc(stText(status())) : 'Retrouve tout sur ton iPhone, ton Android et tes ordinateurs (gratuit)'}</div></div><span class="muted">›</span>
+      </a>
+
       <div class="card stack">
         <h2 style="margin:0">Sauvegarde</h2>
-        <p class="small muted" style="margin:0">Pour passer d'un appareil à l'autre en attendant la synchronisation (Phase 3).</p>
+        <p class="small muted" style="margin:0">Une copie de tes données dans un fichier, en plus de la synchronisation.</p>
         <label class="check" style="padding:0"><input type="checkbox" data-withkeys><span>Inclure mes clés API (garde alors ce fichier pour toi)</span></label>
         <div class="row"><button class="btn" data-export>${icon('share')}Exporter</button><label class="btn ghost">${icon('file')}Importer<input type="file" accept="application/json" data-import hidden></label></div>
         <hr class="sep">
         <button class="btn danger" data-clear>${icon('trash')}Tout effacer sur cet appareil</button>
       </div>
-      <p class="small muted">sudo_ · Phase 1</p>
+      <p class="small muted">sudo_ · Phase 3</p>
     </div>`;
   paintIcons(v);
 
@@ -122,7 +129,7 @@ export async function settingsView(v) {
     catch (err) { toast(err.message, 5000); }
   };
   $('[data-clear]', v).onclick = async () => {
-    if (!confirm('Effacer définitivement ateliers, photos, vérifications, clés et réglages de cet appareil ?')) return;
+    if (!confirm(acc ? 'Effacer ateliers, photos, vérifications, clés et réglages de cet appareil ? Tes données en ligne restent : elles reviendront si tu reconnectes cet appareil.' : 'Effacer définitivement ateliers, photos, vérifications, clés et réglages de cet appareil ?')) return;
     await clearAll();
     location.reload();
   };

@@ -9,6 +9,8 @@ import { askJSON } from '../ai.js';
 import { $, $$, esc, toast, icon, copy, download, slug, domainTag, sheet, pickImages, paintIcons, loading } from '../ui.js';
 import { statusOf } from './verif.js';
 import { analysePhoto } from './photo.js';
+import { syncGroup, memberName, myName } from '../group.js';
+import { groupSheet, groupPane, addNote, groupRapport } from './groupe.js';
 
 const VIEWS = [['etabli', 'Établi', 'columns'], ['focus', 'Focus', 'focus'], ['chat', 'Conversation', 'chat']];
 
@@ -20,7 +22,21 @@ export async function atelierView(v, id) {
   let tab = 'assistant';
   let chatApi = null;
 
-  const save = async () => { at.updatedAt = Date.now(); await put('ateliers', at); };
+  // En groupe : chaque enregistrement part aussi vers le groupe (regroupé sur 1,5 s).
+  let gTimer = null, gBusy = false;
+  const groupSync = async (repaint = false) => {
+    if (!at.group || gBusy || !navigator.onLine) return;
+    gBusy = true;
+    try {
+      const changed = await syncGroup(at);
+      if (changed && repaint && v.isConnected && !v.contains(document.activeElement?.closest('input, textarea, select'))) render(true);
+    } catch { /* hors ligne : on réessaiera */ }
+    gBusy = false;
+  };
+  const save = async () => {
+    at.updatedAt = Date.now(); await put('ateliers', at);
+    if (at.group) { clearTimeout(gTimer); gTimer = setTimeout(() => groupSync(), 1500); }
+  };
   const system = async () => atelierSystem(prof, at);
   const curIdx = () => { const i = at.steps.findIndex(s => !s.done); return i < 0 ? at.steps.length - 1 : i; };
   const doneCount = () => at.steps.filter(s => s.done).length;
@@ -75,7 +91,7 @@ export async function atelierView(v, id) {
       <a class="icon-btn" href="#/ateliers" aria-label="Retour aux ateliers">${icon('back')}</a>
       <div style="flex:1 1 260px;min-width:0">
         <h1>${esc(at.title)}</h1>
-        <div class="row small">${domainTag(at.domain)}<span class="tag ${st.cls}">${st.label}${at.best != null ? ' · meilleure note ' + at.best + '/20' : ''}</span><span class="muted at-progress">${doneCount()}/${at.steps.length} étapes</span></div>
+        <div class="row small">${domainTag(at.domain)}<span class="tag ${st.cls}">${st.label}${at.best != null ? ' · meilleure note ' + at.best + '/20' : ''}</span><span class="muted at-progress">${doneCount()}/${at.steps.length} étapes</span>${at.group ? `<button class="tag" data-grp style="cursor:pointer;color:var(--brand)">Groupe · ${(at.gmembers || []).length}</button>` : ''}</div>
       </div>
       <div class="row">
         <div class="seg" role="group" aria-label="Vue">${VIEWS.map(([k, l]) => `<button data-view="${k}" class="${at.view === k ? 'on' : ''}">${l}</button>`).join('')}</div>
@@ -94,7 +110,7 @@ export async function atelierView(v, id) {
     return `<div class="step ${s.done ? 'done' : ''} ${i === curIdx() && !s.done ? 'cur' : ''}" data-step="${i}">
       <button class="step-row" data-toggle="${i}" aria-expanded="${open}">
         <span class="num">${s.done ? icon('check') : i + 1}</span>
-        <span class="step-title">${esc(s.titre)}${s.groupe ? `<span class="small muted" style="display:block;font-weight:400">${esc(s.groupe)}</span>` : ''}</span>
+        <span class="step-title">${esc(s.titre)}${s.groupe ? `<span class="small muted" style="display:block;font-weight:400">${esc(s.groupe)}</span>` : ''}${who(s)}</span>
         ${res ? `<span class="step-res">${esc(res)}</span>` : ''}
       </button>
       ${open ? `<div class="step-body">
@@ -102,6 +118,7 @@ export async function atelierView(v, id) {
         ${s.faire.length ? `<div class="list">${s.faire.map((f, j) => `<label class="check"><input type="checkbox" data-faire="${i}:${j}" ${f.done ? 'checked' : ''}><span>${esc(f.t)}</span></label>`).join('')}</div>` : ''}
         ${s.releves.length ? `<div class="grid2">${s.releves.map((r, j) => `<label class="field">${esc(r.champ)}<input class="input mono" data-rel="${i}:${j}" value="${esc(r.valeur)}" placeholder="à relever" autocomplete="off" spellcheck="false"></label>`).join('')}</div>` : ''}
         ${s.validation ? `<div class="small muted">Pour valider : ${esc(s.validation)}</div>` : ''}
+        ${assignBox(s, i)}
         <div class="row">
           <button class="btn ${s.done ? 'ghost' : 'primary'}" data-done="${i}">${s.done ? 'Rouvrir' : 'Étape terminée'}</button>
           <button class="btn hint" data-hint="${i}">${icon('bulb')}Indice${s.hint ? ' ' + Math.min(3, s.hint + 1) + '/3' : ''}</button>
@@ -109,6 +126,17 @@ export async function atelierView(v, id) {
         </div>
       </div>` : ''}
     </div>`;
+  }
+
+  // Qui s'en charge / qui l'a fait (atelier de groupe).
+  function who(s) {
+    if (!at.group) return '';
+    const t = s.done && s.doneBy ? `fait par ${s.doneBy}` : s.assignee ? `→ ${memberName(at, s.assignee) || '?'}` : '';
+    return t ? `<span class="small" style="display:block;font-weight:400;color:var(--brand)">${esc(t)}</span>` : '';
+  }
+  function assignBox(s, i) {
+    if (!at.group) return '';
+    return `<label class="field" style="max-width:280px">Qui s’en charge ?<select class="input" data-assign="${i}"><option value="">Pas encore réparti</option>${(at.gmembers || []).map(m => `<option value="${esc(m.user_id)}" ${s.assignee === m.user_id ? 'selected' : ''}>${esc(m.name || '?')}${m.user_id === at.group.me ? ' (moi)' : ''}</option>`).join('')}</select></label>`;
   }
 
   // ---------- Établi ----------
@@ -125,7 +153,7 @@ export async function atelierView(v, id) {
         ${doneCount() === at.steps.length && at.steps.length ? `<a class="btn primary big block" href="#/verif/${at.id}">${icon('play')}Vérification par le formateur</a>` : `<a class="btn ghost block" href="#/verif/${at.id}">Vérification par le formateur</a>`}
       </div>
       <div class="tools">
-        <div class="tools-tabs" role="tablist">${[['assistant', 'Assistant'], ['commandes', 'Commandes'], ['schema', 'Schéma'], ['releves', 'Relevés'], ['photos', 'Photos']].map(([k, l]) => `<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}" aria-selected="${tab === k}">${l}</button>`).join('')}</div>
+        <div class="tools-tabs" role="tablist">${[['assistant', 'Assistant'], ...(at.group ? [['groupe', 'Groupe']] : []), ['commandes', 'Commandes'], ['schema', 'Schéma'], ['releves', 'Relevés'], ['photos', 'Photos']].map(([k, l]) => `<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}" aria-selected="${tab === k}">${l}</button>`).join('')}</div>
         <div class="tools-body" data-tools></div>
       </div>
     </div>`;
@@ -168,7 +196,8 @@ export async function atelierView(v, id) {
       chatApi = mountChat($('[data-chat]', box), chatOpts());
     } else {
       chatApi = null;
-      box.innerHTML = `<div class="pad">${{ commandes: commandesPane, schema: schemaPane, releves: relevesTable, photos: photosPane }[tab]()}</div>`;
+      if (tab === 'groupe' && !at.group) tab = 'commandes';
+      box.innerHTML = `<div class="pad">${{ commandes: commandesPane, schema: schemaPane, releves: relevesTable, photos: photosPane, groupe: () => groupPane(at) }[tab]()}</div>`;
     }
     paintIcons(box);
   }
@@ -224,11 +253,13 @@ export async function atelierView(v, id) {
   const clarifs = () => (at.clarifs.length ? `<button class="chip" data-showclar style="color:var(--hint);border-color:var(--hint-line)">${at.clarifs.length} à clarifier</button>` : '');
 
   // ---------- Rendu ----------
-  function render() {
+  function render(keep) {
+    const y = window.scrollY;
     v.innerHTML = at.view === 'focus' ? focus() : at.view === 'chat' ? convo() : etabli();
     if (at.view === 'etabli') paintTools();
     if (at.view === 'chat') chatApi = mountChat($('[data-chat]', v), chatOpts());
     paintIcons(v);
+    if (keep) window.scrollTo(0, y);
   }
 
   async function markDone(i) {
@@ -237,6 +268,7 @@ export async function atelierView(v, id) {
     if (at.view === 'focus' && s.done) { render(); return; }
     s.done = !s.done;
     if (s.done) s.faire.forEach(f => { f.done = true; });
+    if (at.group) { if (s.done) { s.doneBy = await myName(at); s.doneAt = Date.now(); } else { delete s.doneBy; delete s.doneAt; } }
     openStep = s.done ? curIdx() : i;
     await save();
     logActivity();
@@ -316,6 +348,7 @@ export async function atelierView(v, id) {
       <button class="item" data-a="verif">${icon('play')}<span class="grow">Vérification par le formateur</span></button>
       <button class="item" data-a="rapport">${icon('file')}<span class="grow">Compte rendu de TP</span></button>
       <button class="item" data-a="fiches">${icon('list')}<span class="grow">Créer des fiches pour le carnet</span></button>
+      <button class="item" data-a="groupe">${icon('chat')}<span class="grow">${at.group ? 'Groupe : membres et invitation' : 'Travailler en groupe'}</span></button>
       <button class="item" data-a="consigne">${icon('image')}<span class="grow">Revoir la consigne d'origine</span></button>
       <button class="item" data-a="rename">${icon('wrench')}<span class="grow">Renommer</span></button>
       <button class="item" data-a="delete" style="color:var(--err)">${icon('trash')}<span class="grow">Supprimer l'atelier</span></button>
@@ -326,6 +359,7 @@ export async function atelierView(v, id) {
       sh.close();
       if (a === 'verif') location.hash = '#/verif/' + at.id;
       if (a === 'rapport') genRapport();
+      if (a === 'groupe') groupSheet(at, () => render(true));
       if (a === 'fiches') genFiches();
       if (a === 'consigne') sheet(`<h2>Consigne d'origine</h2>${at.consigne.images?.map(u => `<img src="${esc(u)}" alt="" style="width:100%;border-radius:12px;margin-bottom:10px">`).join('') || ''}<pre class="mono small" style="white-space:pre-wrap">${esc(at.consigne.text || '')}</pre>`);
       if (a === 'rename') { const t = prompt('Nouveau nom', at.title); if (t) { at.title = t.trim(); await save(); render(); } }
@@ -356,6 +390,10 @@ export async function atelierView(v, id) {
     const d = t.dataset;
     if (d.view) { at.view = d.view; await save(); render(); window.scrollTo(0, 0); return; }
     if (d.menu !== undefined) return menu();
+    if (d.grp !== undefined) return groupSheet(at, () => render(true));
+    if (d.addnote !== undefined) { const ta = $('[data-note]', v); const t = ta.value.trim(); if (!t) return; await addNote(at, t); await save(); paintTools(); groupSync(); return; }
+    if (d.delnote) { if (!confirm('Supprimer cette note pour tout le groupe ?')) return; at.gnotes = at.gnotes.filter(n => n.id !== d.delnote); await save(); paintTools(); return; }
+    if (d.grap !== undefined) return groupRapport(at, save);
     if (d.toggle) { const i = +d.toggle; openStep = openStep === i ? -1 : i; refreshSide(); if (tab === 'commandes') paintTools(); return; }
     if (d.done) return markDone(+d.done);
     if (d.hint) return askHint(+d.hint);
@@ -383,6 +421,7 @@ export async function atelierView(v, id) {
   };
   v.onchange = async e => {
     const t = e.target;
+    if (t.dataset.assign) { const s = at.steps[+t.dataset.assign]; if (t.value) s.assignee = t.value; else delete s.assignee; await save(); refreshSide(); return; }
     if (t.dataset.faire) {
       const [i, j] = t.dataset.faire.split(':').map(Number);
       at.steps[i].faire[j].done = t.checked;
@@ -400,4 +439,20 @@ export async function atelierView(v, id) {
   };
 
   render();
+
+  // Groupe : nouvelles des autres toutes les 5 s (page visible). Mes appareils : rechargement si l'atelier change ailleurs.
+  if (at.group) groupSync(true);
+  const poll = setInterval(() => { if (!v.isConnected) return clearInterval(poll); if (at.group && !document.hidden) groupSync(true); }, 5000);
+  const onRemote = async e => {
+    if (!v.isConnected) return window.removeEventListener('sudo:changed', onRemote);
+    if (!e.detail.some(x => x.store === 'ateliers' && x.id === at.id)) return;
+    if (v.contains(document.activeElement?.closest('input, textarea, select'))) return;
+    const fresh = await get('ateliers', at.id);
+    if (!fresh) return;
+    for (const k of Object.keys(at)) delete at[k];
+    Object.assign(at, fresh);
+    at.chat ||= []; at.steps ||= []; at.clarifs ||= []; at.photos ||= [];
+    render(true);
+  };
+  window.addEventListener('sudo:changed', onRemote);
 }

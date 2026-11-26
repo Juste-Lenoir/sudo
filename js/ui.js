@@ -35,6 +35,9 @@ const PATHS = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/>',
   share: '<path d="M12 3v12M7 8l5-5 5 5M5 14v6h14v-6"/>',
+  cards: '<rect x="3" y="6" width="14" height="14" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v12"/>',
+  cloud: '<path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.1 9.2 4.5 4.5 0 0 0 7 18z"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6"/>',
   phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
 };
 export const icon = (name, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name] || ''}</svg>`;
@@ -94,7 +97,16 @@ export function download(name, text, type = 'text/markdown') {
 
 export async function copy(text) {
   try { await navigator.clipboard.writeText(text); toast('Copié'); }
-  catch { toast('Copie impossible sur cet appareil'); }
+  catch {
+    // Repli (anciens navigateurs, page non sécurisée) : sélection d'un champ caché.
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0;top:0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { /* rien */ }
+    ta.remove();
+    toast(ok ? 'Copié' : 'Copie impossible sur cet appareil');
+  }
 }
 
 export function autoGrow(ta, max = 220) {

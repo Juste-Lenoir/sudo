@@ -4,7 +4,45 @@ import { askJSON } from '../ai.js';
 import { base, photoPrompt, PHOTO_MODES } from '../prompts.js';
 import { dbAll, put, del, uid, getProfile } from '../store.js';
 import { md } from '../md.js';
-import { $, esc, toast, icon, pickImages, loadImage, download, paintIcons, loading, compressImage, fmtDate } from '../ui.js';
+import { $, esc, toast, icon, pickImages, loadImage, download, paintIcons, loading, compressImage, fmtDate, sheet } from '../ui.js';
+import { account, sendPhotos } from '../sync.js';
+
+// ---------- Photo reçue d'un autre appareil (téléphone → ordinateur) ----------
+let inbox = [];
+const queue = [];
+export function receivedPhoto({ src, from }) {
+  queue.push({ src, from });
+  if (queue.length === 1) showReceived();
+}
+async function showReceived() {
+  const p = queue[0];
+  if (!p) return;
+  const m = location.hash.match(/^#\/atelier\/([\w-]+)/);
+  const at = m ? (await dbAll('ateliers')).find(a => a.id === m[1]) : null;
+  const sh = sheet(`<div class="row"><h2 style="margin:0">Photo reçue</h2><span class="grow"></span><button class="icon-btn" data-close aria-label="Fermer">${icon('x')}</button></div>
+    <p class="small muted">Depuis ${esc(p.from)}${queue.length > 1 ? ` · encore ${queue.length - 1} après celle-ci` : ''}</p>
+    <img src="${esc(p.src)}" alt="Photo reçue" style="width:100%;max-height:52vh;object-fit:contain;border-radius:12px;background:#111">
+    <div class="row" style="margin-top:12px">
+      ${at ? `<button class="btn primary" data-r="at">${icon('wrench')}Ajouter à « ${esc(at.title)} »</button>` : ''}
+      <button class="btn ${at ? '' : 'primary'}" data-r="ana">${icon('camera')}Analyser</button>
+      <button class="btn ghost" data-r="dl">${icon('file')}Télécharger</button>
+    </div>`, { onClose: () => { queue.shift(); setTimeout(showReceived, 200); } });
+  sh.el.addEventListener('click', async e => {
+    const r = e.target.closest('[data-r]')?.dataset.r;
+    if (!r) return;
+    if (r === 'at') {
+      at.photos ||= [];
+      at.photos.push({ src: p.src, ts: Date.now(), resume: 'Photo envoyée depuis ' + p.from });
+      at.updatedAt = Date.now();
+      await put('ateliers', at);
+      window.dispatchEvent(new CustomEvent('sudo:changed', { detail: [{ store: 'ateliers', id: at.id }] }));
+      toast('Photo ajoutée à l’atelier (onglet Photos)');
+    }
+    if (r === 'ana') { inbox.push(p.src); if (location.hash === '#/photo') window.dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = '#/photo'; }
+    if (r === 'dl') download(`photo-${Date.now()}.jpg`, p.src);
+    sh.close();
+  });
+}
 
 // ---------- Rotation (photo prise de travers) ----------
 async function rotate(src) {
@@ -139,8 +177,9 @@ async function runAnalysis(out, { images, context, mode, question, onResult }) {
 
 // ---------- Page « Photo » ----------
 export async function photoView(v) {
-  let images = [];
+  let images = inbox; inbox = [];
   let mode = 'identifier';
+  const acc = await account();
   const history = (await dbAll('photos')).sort((a, b) => b.ts - a.ts).slice(0, 12);
   const ateliers = (await dbAll('ateliers')).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 15);
   v.innerHTML = `
@@ -160,6 +199,7 @@ export async function photoView(v) {
       <label class="field">Pour quel atelier ? (facultatif, aide l'IA)
         <select class="input" data-at><option value="">Aucun</option>${ateliers.map(a => `<option value="${a.id}">${esc(a.title)}</option>`).join('')}</select></label>
       <button class="btn primary big block" data-go disabled>Analyser</button>
+      ${acc ? `<button class="btn block" data-send disabled>${icon('share')}Envoyer à l’ordinateur</button>` : ''}
       <div data-out></div>
       ${history.length ? `<div><div class="label" style="margin-top:18px">Dernières analyses</div><div class="list">${history.map(h => `<button class="item" data-hist="${h.id}"><img src="${esc(h.src)}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:8px"><div class="grow"><div class="t">${esc(h.r?.resume || 'Photo')}</div><div class="s">${fmtDate(h.ts)} · ${esc(PHOTO_MODES[h.mode]?.label || '')}</div></div></button>`).join('')}</div></div>` : ''}
     </div>`;
@@ -167,7 +207,16 @@ export async function photoView(v) {
   const drawImgs = () => {
     $('[data-imgs]', v).innerHTML = images.map((u, i) => `<div class="thumb" style="position:relative"><img src="${esc(u)}" alt="" style="width:96px;height:96px"><button data-rm="${i}" aria-label="Retirer">✕</button><button data-rot="${i}" aria-label="Tourner" style="position:absolute;left:4px;bottom:4px;width:28px;height:28px;border-radius:14px;border:0;background:#000c;color:#fff">${icon('rotate')}</button></div>`).join('');
     go.disabled = !images.length;
+    const sb = $('[data-send]', v); if (sb) sb.disabled = !images.length;
   };
+  $('[data-send]', v)?.addEventListener('click', async e => {
+    const b = e.currentTarget;
+    b.disabled = true; b.textContent = 'Envoi…';
+    try { await sendPhotos(images); toast(`${images.length > 1 ? images.length + ' photos envoyées' : 'Photo envoyée'} : ouvre sudo sur l’ordinateur`); images = []; drawImgs(); }
+    catch (x) { toast(x.message, 5000); }
+    b.innerHTML = `${icon('share')}Envoyer à l’ordinateur`;
+    b.disabled = !images.length;
+  });
   const add = imgs => { images.push(...imgs); drawImgs(); };
   $('[data-cam]', v).onclick = async () => add(await pickImages({ camera: true }));
   $('[data-files]', v).onclick = async () => add(await pickImages());
@@ -234,5 +283,6 @@ export async function photoView(v) {
     dragLabels($('[data-annot]', sh.el), rec.r.elements || [], () => put('photos', rec));
     $('[data-delh]', sh.el).onclick = async () => { await del('photos', rec.id); sh.close(); photoView(v); };
   });
+  if (images.length) drawImgs();
   paintIcons(v);
 }

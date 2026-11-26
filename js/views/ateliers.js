@@ -27,14 +27,14 @@ export async function ateliersList(v) {
   const all = (await dbAll('ateliers')).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   v.innerHTML = `
     <div class="row" style="margin-bottom:16px"><h1 style="margin:0">Ateliers</h1><span class="grow"></span>
-      <a class="btn primary" href="#/atelier/nouveau">${icon('plus')}Nouvel atelier</a></div>
+      <a class="btn ghost" href="#/rejoindre">${icon('users')}Rejoindre</a><a class="btn primary" href="#/atelier/nouveau">${icon('plus')}Nouvel atelier</a></div>
     ${all.length ? `<div class="list">${all.map(a => {
       const st = statusOf(a);
       const done = (a.steps || []).filter(s => s.done).length;
       return `<a class="item" href="#/atelier/${a.id}">
         <div class="grow"><div class="t">${esc(a.title)}</div>
         <div class="s">${fmtDate(a.updatedAt || a.createdAt)} · ${done}/${(a.steps || []).length} étapes</div></div>
-        ${domainTag(a.domain)}<span class="tag ${st.cls}">${st.label}${a.best != null ? ' · ' + a.best + '/20' : ''}</span></a>`;
+        <span class="at-tags">${a.group ? `<span class="tag" style="color:var(--brand)">${icon('users', 'i sm')}Groupe</span>` : ''}${domainTag(a.domain)}<span class="tag ${st.cls}">${st.label}${a.best != null ? ' · ' + a.best + '/20' : ''}</span></span></a>`;
     }).join('')}</div>`
     : `<div class="card empty"><p>Aucun atelier pour l'instant.</p><p class="small">Prends la consigne du formateur en photo, dicte-la ou tape-la : sudo en fait un plan d'étapes.</p><a class="btn primary" href="#/atelier/nouveau">Créer mon premier atelier</a></div>`}`;
 }

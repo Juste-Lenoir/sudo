@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>sudo_</title>
-  <meta name="description" content="sudo_ : ton assistant de formation en maintenance informatique et administration système. Ateliers guidés, photos analysées, vérification façon formateur.">
+  <meta name="description" content="sudo_ : ton assistant de formation en maintenance informatique et administration système. Ateliers guidés, photos analysées, quiz, flashcards, terminal simulé, sous-réseaux.">
   <meta name="theme-color" content="#000000">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
@@ -22,12 +22,14 @@
     <nav class="topnav" aria-label="Navigation principale">
       <a href="#/" data-nav="accueil">Aujourd'hui</a>
       <a href="#/ateliers" data-nav="ateliers">Ateliers</a>
+      <a href="#/reviser" data-nav="reviser">Réviser</a>
+      <a href="#/outils" data-nav="outils">Outils</a>
       <a href="#/assistant" data-nav="assistant">Assistant</a>
-      <a href="#/photo" data-nav="photo">Photo</a>
     </nav>
     <span class="grow"></span>
     <button id="quota" class="quota" type="button" aria-label="Consommation des IA"></button>
     <a href="#/photo" class="icon-btn only-desktop" aria-label="Analyser une photo" data-icon="camera"></a>
+    <a href="#/compte" id="sync" class="icon-btn sync-btn" hidden data-icon="cloud"></a>
     <a href="#/reglages" class="icon-btn" aria-label="Réglages" data-icon="gear"></a>
   </header>
   <main id="view" class="view"></main>
@@ -35,8 +37,8 @@
     <a href="#/" data-nav="accueil"><i data-icon="home"></i>Aujourd'hui</a>
     <a href="#/ateliers" data-nav="ateliers"><i data-icon="wrench"></i>Ateliers</a>
     <a href="#/photo" data-nav="photo" class="tab-photo" aria-label="Photo"><i data-icon="camera"></i></a>
+    <a href="#/reviser" data-nav="reviser outils"><i data-icon="cards"></i>Réviser</a>
     <a href="#/assistant" data-nav="assistant"><i data-icon="chat"></i>Assistant</a>
-    <a href="#/reglages" data-nav="reglages"><i data-icon="gear"></i>Réglages</a>
   </nav>
   <div id="sheet-root"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
