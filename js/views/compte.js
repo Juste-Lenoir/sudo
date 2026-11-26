@@ -1,5 +1,19 @@
 // Synchronisation : guide pas à pas pour créer le projet Supabase gratuit, connexion par code e-mail, état.
 import { config, saveConfig, conn, status, syncNow, disconnect } from '../sync.js';
+
+// Lien de connexion collé sur un appareil pas encore configuré : il contient l'adresse du projet et sa clé publique.
+async function loginWithLink(link) {
+  let u;
+  try { u = new URL(String(link).trim()); } catch { throw new Error('Ce n’est pas un lien : appui long sur le lien de l’e-mail → Copier, puis colle-le ici.'); }
+  let sb = null;
+  try { sb = new URL(u.searchParams.get('redirect_to') || '').searchParams.get('sb'); } catch { /* pas de retour */ }
+  if (sb) {
+    const j = JSON.parse(atob(sb.replace(/-/g, '+').replace(/_/g, '/')));
+    await saveConfig(j.u, j.k);
+  } else if (!(await config())) throw new Error('Ce lien vient d’une ancienne version : redemande un e-mail de connexion.');
+  const c = await conn();
+  return c.verifyLink(link);
+}
 import { dbAll } from '../store.js';
 import { $, esc, icon, toast, copy, paintIcons } from '../ui.js';
 
@@ -86,6 +100,14 @@ export async function compteView(v) {
       <details class="card"><summary style="cursor:pointer">Projet : <span class="mono small">${esc(cfg.url.replace(/^https:\/\//, ''))}</span></summary><div class="row" style="margin-top:10px"><button class="btn sm ghost" data-reset>Changer de projet</button></div></details>`
       : `
       <div class="card stack">
+        <h2 style="margin:0">Déjà configuré sur un autre appareil ?</h2>
+        <p class="small muted" style="margin:0">Demande un e-mail de connexion depuis cet autre appareil (Réglages → Synchronisation). Ici, fais un <b>appui long</b> sur le lien de l’e-mail → <b>Copier le lien</b>, puis colle-le : c’est tout.</p>
+        <label class="field">Lien reçu par e-mail<input class="input mono" data-link placeholder="https://….supabase.co/auth/v1/verify?token=…" autocomplete="off" spellcheck="false"></label>
+        <button class="btn primary" data-vlink>Se connecter avec ce lien</button>
+        <div class="small" data-err style="color:var(--err)"></div>
+      </div>
+      <h2 style="margin:8px 0 0">Première fois : créer ton projet</h2>
+      <div class="card stack">
         <p style="margin:0">Pour retrouver tes ateliers, ton carnet et ta progression sur tous tes appareils, sudo utilise <b>Supabase</b>, un service gratuit. Compte une dizaine de minutes, une seule fois.</p>
         <p class="small muted" style="margin:0">Formule gratuite : 500 MB de données et 1 GB de photos, largement assez. Le projet se met en pause après une semaine sans aucune utilisation : il se réveille d’un clic dans le tableau de bord Supabase.</p>
       </div>
@@ -94,7 +116,7 @@ export async function compteView(v) {
         <h2 style="margin:0">Colle tes deux valeurs</h2>
         <label class="field">Project URL<input class="input mono" name="url" required placeholder="https://abcdefgh.supabase.co" autocomplete="off" spellcheck="false"></label>
         <label class="field">Clé publishable (ou anon)<input class="input mono" name="key" required placeholder="sb_publishable_…" autocomplete="off" spellcheck="false"></label>
-        <div class="small" data-err style="color:var(--err)"></div>
+        <div class="small" data-cerr style="color:var(--err)"></div>
         <button class="btn primary" type="submit">Enregistrer et tester</button>
       </form>`}
     </div>`;
@@ -110,7 +132,7 @@ export async function compteView(v) {
 
   $('[data-cfg]', v)?.addEventListener('submit', async e => {
     e.preventDefault();
-    const fd = new FormData(e.target), err = $('[data-err]', v);
+    const fd = new FormData(e.target), err = $('[data-cerr]', v);
     const url = String(fd.get('url')).trim(), key = String(fd.get('key')).trim();
     const bad = checkKey(key);
     if (bad) { err.textContent = bad; return; }
@@ -145,7 +167,7 @@ export async function compteView(v) {
   $('[data-vlink]', v)?.addEventListener('click', async e => {
     const btn = e.currentTarget, err = $('[data-err]', v);
     btn.disabled = true; err.textContent = '';
-    try { await c.verifyLink($('[data-link]', v).value); toast('Connecté : synchronisation en cours'); await syncNow(); compteView(v); }
+    try { await loginWithLink($('[data-link]', v).value); toast('Connecté : synchronisation en cours'); await syncNow(); compteView(v); }
     catch (x) { err.textContent = /expired|invalid|403/i.test(x.message) ? 'Lien expiré ou déjà utilisé : redemande un e-mail.' : x.message; btn.disabled = false; }
   });
   $('[data-reset]', v)?.addEventListener('click', async () => { if (!confirm('Oublier ce projet sur cet appareil ?')) return; await saveConfig(null); compteView(v); });
