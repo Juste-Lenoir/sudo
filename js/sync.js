@@ -182,6 +182,15 @@ export async function handleAuthHash() {
     history.replaceState(null, '', location.pathname + location.search + '#/compte');
     setTimeout(() => window.dispatchEvent(new CustomEvent('ai-info', { detail: /expired|invalid/i.test(p.get('error_description')) ? 'Lien de connexion expiré ou déjà utilisé : redemande un e-mail.' : p.get('error_description') })), 800);
   }
+  const q = new URLSearchParams(location.search);
+  if (q.has('sb')) {
+    if (/access_token=/.test(location.hash)) {
+      try { const j = JSON.parse(atob(q.get('sb').replace(/-/g, '+').replace(/_/g, '/'))); if (j.u && j.k) await saveConfig(j.u, j.k); } catch { /* lien abîmé */ }
+    }
+    q.delete('sb');
+    const rest = q.toString();
+    history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+  }
   if (/access_token=/.test(location.hash)) {
     const p = new URLSearchParams(location.hash.slice(1));
     const c = await conn();

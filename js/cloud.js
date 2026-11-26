@@ -83,7 +83,10 @@ class Conn {
   // ---- Connexion ----
   // L'e-mail contient un lien (et un code si le modèle d'e-mail le prévoit). Le lien ramène dans sudo.
   sendCode(email) {
-    const back = encodeURIComponent(location.origin + location.pathname);
+    // Le lien ramène dans sudo avec l'adresse du projet et sa clé publique : il marche même
+    // dans un navigateur où sudo n'a encore jamais été configuré.
+    const sb = btoa(JSON.stringify({ u: this.url, k: this.key })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const back = encodeURIComponent(location.origin + location.pathname + '?sb=' + sb);
     return this.raw('/auth/v1/otp?redirect_to=' + back, { method: 'POST', auth: false, body: { email, create_user: true } });
   }
   // Lien de l'e-mail collé dans sudo (utile sur iPhone : le lien s'ouvrirait dans Safari, pas dans l'app installée).
