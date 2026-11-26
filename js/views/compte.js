@@ -34,8 +34,7 @@ export async function compteView(v) {
     ['Crée le projet', `<b>New project</b> → nom : <code>sudo</code> · <b>Database Password</b> : clique <b>Generate</b> et garde-le dans ton gestionnaire de mots de passe (sudo n’en a pas besoin) · <b>Region</b> : Europe (Paris ou Frankfurt). Patiente 1 à 2 minutes.`],
     ['Installe les tables', `Menu de gauche → <b>SQL Editor</b> → <b>New query</b>. Colle le script ci-dessous puis <b>Run</b>. Résultat attendu : <i>Success. No rows returned</i>.<div class="row" style="margin-top:8px"><button class="btn sm" data-sql>${icon('copy')}Copier le script</button><a class="btn sm ghost" href="supabase.sql" target="_blank">Voir le script</a></div>`],
     ['Autorise les invités (ateliers en groupe)', `<b>Authentication</b> → <b>Sign In / Providers</b> → active <b>Allow anonymous sign-ins</b> → <b>Save</b>. Tes camarades pourront rejoindre ton groupe avec le code, sans créer de compte.`],
-    ['Reçois un code par e-mail', `<b>Authentication</b> → <b>Emails</b> → modèles <b>Magic Link</b> puis <b>Confirm signup</b> : ajoute cette ligne dans le message et enregistre.<div class="cmd" style="margin-top:8px"><code class="grow">&lt;p&gt;Ton code sudo : {{ .Token }}&lt;/p&gt;</code><button class="round" data-cp="<p>Ton code sudo : {{ .Token }}</p>" aria-label="Copier">${icon('copy')}</button></div>`],
-    ['Adresse de sudo', `<b>Authentication</b> → <b>URL Configuration</b> → <b>Site URL</b> : colle l’adresse de sudo, puis <b>Save</b>.<div class="cmd" style="margin-top:8px"><code class="grow">${esc(SITE)}</code><button class="round" data-cp="${esc(SITE)}" aria-label="Copier">${icon('copy')}</button></div>`],
+    ['Adresse de sudo', `<b>Authentication</b> → <b>URL Configuration</b> → <b>Site URL</b> : colle l’adresse de sudo, puis <b>Save changes</b>. C’est là que le lien de connexion reçu par e-mail te ramènera.<div class="cmd" style="margin-top:8px"><code class="grow">${esc(SITE)}</code><button class="round" data-cp="${esc(SITE)}" aria-label="Copier">${icon('copy')}</button></div>`],
     ['Copie l’adresse et la clé publique', `Bouton <b>Connect</b> en haut du projet (ou <b>Project Settings</b> → <b>API Keys</b>) : copie le <b>Project URL</b> et la clé <b>publishable</b> (<code>sb_publishable_…</code>, ou l’ancienne <b>anon</b>). <span style="color:var(--err)">Jamais la clé secret ni service_role.</span>`],
   ];
 
@@ -66,13 +65,21 @@ export async function compteView(v) {
       : cfg ? `
       <div class="card stack" data-login>
         <h2 style="margin:0">Connexion</h2>
-        <p class="small muted" style="margin:0">Pas de mot de passe : tu reçois un code par e-mail.</p>
+        <p class="small muted" style="margin:0">Pas de mot de passe : tu reçois un lien de connexion par e-mail.</p>
         <label class="field">Ton e-mail<input class="input" type="email" data-email autocomplete="email" placeholder="toi@exemple.fr"></label>
-        <button class="btn primary" data-send>Recevoir le code</button>
+        <button class="btn primary" data-send>Recevoir l’e-mail de connexion</button>
         <div class="stack" data-codebox hidden>
-          <label class="field">Code reçu<input class="input mono" data-code inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456" style="font-size:22px;letter-spacing:4px;max-width:220px"></label>
-          <button class="btn primary" data-verify>Se connecter</button>
-          <p class="small muted" style="margin:0">Pas de code dans l’e-mail, seulement un lien ? Fais l’étape 5 du guide. Le service d’e-mail gratuit de Supabase envoie peu d’e-mails par heure : attends un peu entre deux demandes.</p>
+          <ol class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+            <li>Ouvre l’e-mail de <b>Supabase Auth</b> (« Your sign-in link », ou « Confirm your signup » la première fois). Regarde aussi les spams.</li>
+            <li><b>Sur ordinateur, ou sudo ouvert dans le navigateur</b> : clique sur le lien. sudo s’ouvre déjà connecté.</li>
+            <li><b>Dans l’app installée sur le téléphone</b> : n’ouvre pas le lien (il s’ouvrirait dans le navigateur). Fais un <b>appui long</b> dessus → <b>Copier le lien</b>, puis colle-le ici.</li>
+          </ol>
+          <label class="field">Lien reçu par e-mail<input class="input mono" data-link placeholder="https://….supabase.co/auth/v1/verify?token=…" autocomplete="off" spellcheck="false"></label>
+          <button class="btn primary" data-vlink>Se connecter avec ce lien</button>
+          <details class="small"><summary style="cursor:pointer" class="muted">J’ai reçu un code à chiffres</summary>
+            <div class="row" style="margin-top:8px;align-items:flex-end"><label class="field">Code<input class="input mono" data-code inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456" style="letter-spacing:3px;max-width:180px"></label><button class="btn" data-verify>Valider</button></div>
+          </details>
+          <p class="small muted" style="margin:0">Le lien ne sert qu’une fois et expire au bout d’une heure. Le service d’e-mail gratuit de Supabase envoie peu d’e-mails par heure : attends quelques minutes entre deux demandes.</p>
         </div>
         <div class="small" data-err style="color:var(--err)"></div>
       </div>
@@ -123,7 +130,7 @@ export async function compteView(v) {
     email = $('[data-email]', v).value.trim();
     if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'E-mail invalide'; return; }
     btn.disabled = true; err.textContent = '';
-    try { await c.sendCode(email); $('[data-codebox]', v).hidden = false; btn.textContent = 'Renvoyer le code'; $('[data-code]', v).focus(); toast('Code envoyé : regarde ta boîte mail (et les spams)'); }
+    try { await c.sendCode(email); $('[data-codebox]', v).hidden = false; btn.textContent = 'Renvoyer l’e-mail'; toast('E-mail envoyé : regarde ta boîte mail (et les spams)'); }
     catch (x) { err.textContent = x.message; }
     btn.disabled = false;
   });
@@ -134,6 +141,12 @@ export async function compteView(v) {
     btn.disabled = true; err.textContent = '';
     try { await c.verifyCode(email, code); toast('Connecté : synchronisation en cours'); await syncNow(); compteView(v); }
     catch (x) { err.textContent = x.message; btn.disabled = false; }
+  });
+  $('[data-vlink]', v)?.addEventListener('click', async e => {
+    const btn = e.currentTarget, err = $('[data-err]', v);
+    btn.disabled = true; err.textContent = '';
+    try { await c.verifyLink($('[data-link]', v).value); toast('Connecté : synchronisation en cours'); await syncNow(); compteView(v); }
+    catch (x) { err.textContent = /expired|invalid|403/i.test(x.message) ? 'Lien expiré ou déjà utilisé : redemande un e-mail.' : x.message; btn.disabled = false; }
   });
   $('[data-reset]', v)?.addEventListener('click', async () => { if (!confirm('Oublier ce projet sur cet appareil ?')) return; await saveConfig(null); compteView(v); });
   $('[data-now]', v)?.addEventListener('click', () => syncNow());

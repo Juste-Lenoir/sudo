@@ -81,7 +81,26 @@ class Conn {
   }
 
   // ---- Connexion ----
-  sendCode(email) { return this.raw('/auth/v1/otp', { method: 'POST', auth: false, body: { email, create_user: true } }); }
+  // L'e-mail contient un lien (et un code si le modèle d'e-mail le prévoit). Le lien ramène dans sudo.
+  sendCode(email) {
+    const back = encodeURIComponent(location.origin + location.pathname);
+    return this.raw('/auth/v1/otp?redirect_to=' + back, { method: 'POST', auth: false, body: { email, create_user: true } });
+  }
+  // Lien de l'e-mail collé dans sudo (utile sur iPhone : le lien s'ouvrirait dans Safari, pas dans l'app installée).
+  async verifyLink(link) {
+    let u;
+    try { u = new URL(String(link).trim()); } catch { throw new Error('Ce n’est pas un lien : appui long sur le lien de l’e-mail → Copier, puis colle-le ici.'); }
+    const token = u.searchParams.get('token') || u.searchParams.get('token_hash');
+    if (!token) throw new Error('Ce lien ne contient pas de jeton de connexion.');
+    const types = [u.searchParams.get('type'), 'magiclink', 'signup', 'email'].filter((t, i, a) => t && a.indexOf(t) === i);
+    let s, last;
+    for (const type of types) {
+      try { s = await this.raw('/auth/v1/verify', { method: 'POST', auth: false, body: { type, token_hash: token } }); break; } catch (e) { last = e; }
+    }
+    if (!s) throw last;
+    await this.setSession(s);
+    return this.user;
+  }
   async verifyCode(email, token) {
     let s;
     try { s = await this.raw('/auth/v1/verify', { method: 'POST', auth: false, body: { type: 'email', email, token } }); }

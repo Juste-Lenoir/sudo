@@ -175,14 +175,23 @@ async function receive() {
 }
 
 // ---- Démarrage ----
-export async function startSync() {
-  // Lien de connexion reçu par e-mail (ouvert dans le navigateur) : #access_token=…
+// Retour du lien de connexion reçu par e-mail : #access_token=… (ou #error_description=… s'il a expiré).
+export async function handleAuthHash() {
+  if (/error_description=/.test(location.hash)) {
+    const p = new URLSearchParams(location.hash.slice(1));
+    history.replaceState(null, '', location.pathname + location.search + '#/compte');
+    setTimeout(() => window.dispatchEvent(new CustomEvent('ai-info', { detail: /expired|invalid/i.test(p.get('error_description')) ? 'Lien de connexion expiré ou déjà utilisé : redemande un e-mail.' : p.get('error_description') })), 800);
+  }
   if (/access_token=/.test(location.hash)) {
     const p = new URLSearchParams(location.hash.slice(1));
     const c = await conn();
     if (c) { try { await c.fromLink(p); } catch { /* lien périmé */ } }
     history.replaceState(null, '', location.pathname + location.search + '#/compte');
   }
+}
+
+export async function startSync() {
+  await handleAuthHash();
   const c = await conn();
   if (c?.user && !c.user.anon) set({ status: 'idle' });
   window.addEventListener('online', () => schedule(500));

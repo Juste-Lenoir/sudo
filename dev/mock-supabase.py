@@ -12,6 +12,7 @@ KEY = 'sb_publishable_test'
 users, sessions, refresh = {}, {}, {}
 records, transfers, groups, members, items, files = {}, {}, {}, {}, {}, {}
 seq = itertools.count(1)
+links, last_link = {}, [None]
 
 def new_session(u):
     t, r = 'tok-' + uuid.uuid4().hex, 'ref-' + uuid.uuid4().hex
@@ -66,10 +67,17 @@ class H(BaseHTTPRequestHandler):
     def auth(self, m, ep, q):
         if ep == 'settings': return self.out(200, {'external': {'email': True}})
         if ep == 'otp':
-            b = self.jbody(); print('  [mock] code 123456 envoyé à', b.get('email')); return self.out(200, {})
+            b = self.jbody(); h = 'hash' + uuid.uuid4().hex[:8]; links[h] = b.get('email', '').lower()
+            print('  [mock] e-mail à', b.get('email'), ': code 123456 ou lien http://localhost:54321/auth/v1/verify?token=%s&type=magiclink' % h, flush=True)
+            last_link[0] = h; return self.out(200, {})
+        if ep == 'last-link': return self.out(200, {'token': last_link[0]})
         if ep == 'verify':
             b = self.jbody()
-            if b.get('token') != '123456': return self.err(403, 'Token has expired or is invalid')
+            if b.get('token_hash'):
+                em = links.pop(b['token_hash'], None)
+                if not em: return self.err(403, 'Email link is invalid or has expired')
+                b['email'] = em
+            elif b.get('token') != '123456': return self.err(403, 'Token has expired or is invalid')
             em = b['email'].lower()
             u = next((x for x in users.values() if x['email'] == em), None)
             if not u: u = {'id': str(uuid.uuid4()), 'email': em, 'is_anonymous': False}; users[u['id']] = u

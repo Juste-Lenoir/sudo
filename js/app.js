@@ -19,7 +19,7 @@ import { dashboardView, hubView } from './views/dashboard.js';
 import { setup as setupReminders } from './notify.js';
 import { compteView } from './views/compte.js';
 import { rejoindreView } from './views/groupe.js';
-import { startSync, status as syncStatus } from './sync.js';
+import { startSync, handleAuthHash, status as syncStatus } from './sync.js';
 import { receivedPhoto } from './views/photo.js';
 
 const ROUTES = [
@@ -50,6 +50,7 @@ const ROUTES = [
 let renderId = 0;
 async function render() {
   const id = ++renderId;
+  if (/(access_token|error_description)=/.test(location.hash)) await handleAuthHash();
   const path = location.hash.replace(/^#\/?/, '').split('?')[0];
   for (const [re, fn, nav] of ROUTES) {
     const m = path.match(re);
