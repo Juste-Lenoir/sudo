@@ -1,6 +1,6 @@
 // Service worker : l'app s'ouvre même sans réseau (les IA, elles, ont besoin d'Internet).
 // Pour publier une mise à jour, change le numéro de VERSION.
-const VERSION = 'sudo-v12';
+const VERSION = 'sudo-v13';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/sudo.css',
   'js/app.js', 'js/ai.js', 'js/chat.js', 'js/compare.js', 'js/diagram.js', 'js/domains.js', 'js/md.js',
@@ -11,6 +11,7 @@ const SHELL = [
   'js/views/quiz.js', 'js/views/flashcards.js', 'js/views/planning.js', 'js/views/terminal.js',
   'js/views/subnet.js', 'js/views/carnet.js', 'js/views/memo.js', 'js/views/dashboard.js',
   'js/cloud.js', 'js/sync.js', 'js/group.js', 'js/views/compte.js', 'js/views/groupe.js', 'supabase.sql',
+  'js/repair-data.js', 'js/views/reparer.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 

@@ -5,7 +5,7 @@
 import { onWrite, get, putQuiet, delQuiet, dbAll, getKV, setKV, uid } from './store.js';
 import { connection, cleanUrl, externalize, internalize, dataToBlob, blobToData } from './cloud.js';
 
-const STORES = ['ateliers', 'carnet', 'verifs', 'photos', 'chats', 'cards', 'quizzes'];
+const STORES = ['ateliers', 'carnet', 'verifs', 'photos', 'chats', 'cards', 'quizzes', 'repairs'];
 // Réglages et progression partagés. Jamais : clés des IA (« ai »), sessions, compteurs propres à l'appareil.
 const KV = ['profile', 'activity', 'daily', 'perf', 'weak', 'goals', 'badges', 'exams', 'plan-done', 'reminders', 'subnet', 'subnet-opt', 'terminal-stats', 'terminal2', 'assistant'];
 // Clés des IA : seulement si je l'active (Réglages → Synchronisation), et seulement entre MES appareils

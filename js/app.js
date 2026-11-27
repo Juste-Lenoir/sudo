@@ -21,6 +21,7 @@ import { compteView } from './views/compte.js';
 import { rejoindreView } from './views/groupe.js';
 import { startSync, handleAuthHash, status as syncStatus } from './sync.js';
 import { receivedPhoto } from './views/photo.js';
+import { reparerList, reparerNew, reparationView } from './views/reparer.js';
 
 const ROUTES = [
   [/^$/, homeView, 'accueil'],
@@ -45,6 +46,9 @@ const ROUTES = [
   [/^aide-memoire$/, memoView, 'outils'],
   [/^compte$/, compteView, 'reglages'],
   [/^rejoindre$/, rejoindreView, 'ateliers'],
+  [/^reparer$/, reparerList, 'outils'],
+  [/^reparer\/nouveau$/, reparerNew, 'outils'],
+  [/^reparation\/([\w-]+)$/, reparationView, 'outils'],
 ];
 
 let renderId = 0;
@@ -108,7 +112,7 @@ render();
 setupReminders();
 
 // Données arrivées d'un autre appareil : on rafraîchit les pages de liste (jamais pendant une saisie).
-const LIVE = /^#?\/?(|ateliers|carnet|flashcards|reviser|outils|progression|planning)$/;
+const LIVE = /^#?\/?(|ateliers|carnet|flashcards|reviser|outils|progression|planning|reparer)$/;
 window.addEventListener('sudo:changed', () => {
   if (!LIVE.test(location.hash.split('?')[0])) return;
   if (document.activeElement?.closest('input, textarea, select') || $('#sheet-root').children.length) return;

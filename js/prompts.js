@@ -283,3 +283,40 @@ RÈGLES STRICTES :
 5. Si le message commence par « @verifier » : commence par « [PROF] » puis vérifie l'état RÉEL de l'équipement (d'après les commandes réellement tapées) par rapport à la mission : chaque objectif atteint ✅ ou manquant ❌, ce qui aurait pu être plus simple, et termine par une ligne exacte « NOTE : x/20 ». Pas d'invite à la fin.
 ${mission ? `\nMISSION EN COURS :\n${mission}\n` : ''}Invite de départ : ${d.prompt}`;
 }
+
+// ---------- Réparer (atelier de réparation bénévole) ----------
+function repairCard(r, typeLabel) {
+  return `Appareil : ${typeLabel}${r.marque || r.modele ? ` · ${[r.marque, r.modele].filter(Boolean).join(' ')}` : ''}
+Panne décrite par le propriétaire : ${r.panne || '(non précisée)'}
+${r.parcours?.length ? `Diagnostic déjà fait (parcours hors ligne) :\n${r.parcours.map(x => `- ${x.q} → ${x.rep}`).join('\n')}\n` : ''}${r.notes ? `Notes du réparateur : ${r.notes}\n` : ''}`;
+}
+
+export function repairSystem(prof, r, typeLabel) {
+  return `${base(prof)}
+
+CONTEXTE : ${prof.prenom || 'L’apprenant'} est bénévole dans un atelier de réparation ouvert au public : des gens apportent leur téléphone, tablette ou ordinateur en panne. Il répare avec l'aide des autres bénévoles, avec des outils simples et peu de pièces sur place.
+${repairCard(r, typeLabel)}
+TON RÔLE : mener le diagnostic avec lui, comme un réparateur expérimenté.
+- Un seul test à la fois, du plus simple et du moins risqué au plus délicat (logiciel et accessoires avant d'ouvrir l'appareil). Dis ce qu'il doit observer, puis attends son résultat.
+- SÉCURITÉ d'abord : batterie lithium (gonflée, percée : on arrête), condensateurs et bloc d'alimentation (ne jamais ouvrir), électricité statique, chaleur. Rappelle de débrancher la batterie avant les nappes.
+- Données et vie privée : le propriétaire sauvegarde et déverrouille lui-même. Ne propose JAMAIS de contourner un code, un compte ou un verrouillage d'activation.
+- Si une photo montre une référence (modèle, pièce, carte), lis-la et donne la pièce exacte à chercher. Pour les démontages, indique où trouver un guide fiable (iFixit, manuel de service du fabricant).
+- Sois honnête sur ce qui n'est pas réparable sur place ou pas rentable, et propose l'alternative (pièce à commander, réparateur spécialisé, récupération des données, recyclage).
+- Réponses courtes : il a l'appareil ouvert devant lui.`;
+}
+
+export function repairSummary(r, typeLabel, resultLabel) {
+  return `Rédige le résumé à remettre au PROPRIÉTAIRE de l'appareil, qui n'est pas technicien. Vouvoie-le, phrases simples, sans jargon (ou expliqué entre parenthèses).
+${repairCard(r, typeLabel)}Résultat : ${resultLabel}${r.piece ? `\nPièce à commander : ${r.piece}` : ''}
+${r.transcript ? `Échanges pendant le diagnostic (pour retrouver ce qui a été fait) :\n${r.transcript}\n` : ''}
+Plan, en Markdown, court (lisible sur un téléphone) :
+**Votre appareil** (une ligne) · **Le problème** · **Ce que nous avons fait** (puces) · **Résultat** · **Pièce à commander** (seulement s'il en faut une : référence exacte et où chercher, sans marque de vendeur précise) · **Nos conseils** (2 ou 3, pour que la panne ne revienne pas).
+N'invente rien qui ne figure pas ci-dessus. Pas de bloc de code.`;
+}
+
+export function repairIdentify() {
+  return `Photo d'un appareil apporté en réparation (souvent l'étiquette, le dos ou l'écran « À propos »). Identifie-le.
+Lis les inscriptions visibles (marque, modèle, numéro de modèle comme A2172, SM-G991B, 15-dw1xxx). Si tu n'es pas sûr, laisse le champ vide et dis quelle photo prendre. Ne recopie jamais un numéro de série ou un IMEI.
+Réponds UNIQUEMENT en JSON :
+{"type": "telephone|tablette|portable|fixe|autre", "marque": "", "modele": "nom commercial et numéro de modèle", "remarques": "ce qu'on voit d'utile pour la réparation (dégâts visibles, batterie gonflée…), ou chaîne vide", "autre_photo": ""}`;
+}

@@ -1,7 +1,7 @@
 // Stockage local (IndexedDB) : tout reste sur l'appareil.
 const DB_NAME = 'sudo';
-const VERSION = 3;
-export const STORES = ['kv', 'ateliers', 'carnet', 'verifs', 'photos', 'chats', 'cards', 'quizzes'];
+const VERSION = 4;
+export const STORES = ['kv', 'ateliers', 'carnet', 'verifs', 'photos', 'chats', 'cards', 'quizzes', 'repairs'];
 const INTERNAL = ['sync']; // état de la synchronisation (jamais exporté)
 
 let dbp = null;

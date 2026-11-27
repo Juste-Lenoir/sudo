@@ -77,6 +77,7 @@ export async function hubView(v, which = 'reviser') {
     </div>`;
   const tools = `
     <div class="grid2">
+      ${tile('#/reparer', 'wrench', 'Réparer', 'Appareils apportés : sécurité, diagnostic, résumé')}
       ${tile('#/terminal', 'terminal', 'Terminal simulé', 'Cisco, Linux, PowerShell, CMD, macOS')}
       ${tile('#/aide-memoire', 'file', 'Aide-mémoire', 'Commandes par domaine, copie en un geste')}
       ${tile('#/carnet', 'list', 'Carnet', `${fiches.length} fiche${fiches.length > 1 ? 's' : ''} technique${fiches.length > 1 ? 's' : ''}`)}

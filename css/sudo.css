@@ -497,3 +497,6 @@ svg.i.sm { width: 1em; height: 1em; vertical-align: -.15em; margin-right: 3px; }
 .input.sm { padding: 6px 10px; font-size: 14px; }
 .at-tags { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 @media (max-width: 640px) { a.item:has(.at-tags) { flex-wrap: wrap; } .at-tags { flex-basis: 100%; justify-content: flex-start; } }
+
+/* Réparer */
+.rep-tabs button { white-space: nowrap; padding: 0 6px; }
