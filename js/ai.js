@@ -13,13 +13,13 @@ export const PROVIDERS = [
     limits: { rpd: 1000, tpd: 100000 }, reset: 'sur 24 h glissantes',
     keyUrl: 'https://console.groq.com/keys', help: 'Ultra-rapide : parfaite pour les petites tâches et le 2e avis. Ne lit pas les photos.' },
   { id: 'openrouter', name: 'OpenRouter', full: 'OpenRouter', type: 'openai', free: true, vision: true,
-    base: 'https://openrouter.ai/api/v1', model: 'google/gemma-4-31b-it:free', alt: ['nvidia/nemotron-3.5-super-vl:free', 'google/gemma-4-26b-a4b-it:free'],
+    base: 'https://openrouter.ai/api/v1', model: 'google/gemma-4-31b-it:free', alt: ['google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3.5-super-vl:free', 'nvidia/nemotron-3-ultra-550b-a55b:free'],
     limits: { rpd: 50 }, reset: 'minuit UTC (1 h en France)',
     keyUrl: 'https://openrouter.ai/keys', help: 'Une clé pour beaucoup de modèles. Les modèles « :free » sont gratuits, mais le quota est petit.' },
-  { id: 'mistral', name: 'Mistral', full: 'Mistral AI', type: 'openai', free: true, vision: true,
-    base: 'https://api.mistral.ai/v1', model: 'mistral-small-latest',
-    limits: { rpd: 2000 }, reset: 'limite surtout par minute',
-    keyUrl: 'https://console.mistral.ai/api-keys', help: 'IA française, offre gratuite « Experiment ». Lit les photos.' },
+  { id: 'mistral', name: 'Mistral', full: 'Mistral AI', type: 'openai', paid: true, vision: true,
+    base: 'https://api.mistral.ai/v1', model: 'mistral-small-latest', priceIn: 0.1, priceOut: 0.3,
+    limits: {}, reset: 'crédits achetés',
+    keyUrl: 'https://console.mistral.ai/api-keys', help: 'IA française, lit les photos. Son API n’est plus gratuite : il faut acheter des crédits (Pay-as-you-go). Prix indicatifs, vérifie-les sur le site.' },
   { id: 'cohere', name: 'Cohere', full: 'Cohere', type: 'openai', free: true, vision: false,
     base: 'https://api.cohere.ai/compatibility/v1', model: 'command-a-plus-05-2026', alt: ['command-a-03-2025'],
     limits: { rpd: 33 }, reset: '1 000 demandes par mois (clé d’essai)',
@@ -336,10 +336,12 @@ export async function callOne(id, { system, messages, onDelta = () => {}, signal
       if (slow && !signal?.aborted) { e = Object.assign(new Error(`${model} ne répond pas (surchargé ?)`), { status: 504 }); }
       if ([503, 504].includes(e.status)) markSlow(model);
       if (e.status === 429 && p.type === 'gemini') { markCapped(model, nextReset(id)); window.dispatchEvent(new Event('usage-changed')); }
+      // OpenRouter : un modèle gratuit saturé chez son hébergeur (« Provider returned error ») n'empêche pas les autres.
+      if (e.status === 429 && p.id === 'openrouter') markSlow(model);
       // Chaque modèle Gemini a son propre quota : un 429 sur l'un n'empêche pas l'autre.
-      const retry = [404, 500, 503, 504].includes(e.status) || (e.status === 429 && p.type === 'gemini');
+      const retry = [404, 500, 502, 503, 504].includes(e.status) || (e.status === 429 && (p.type === 'gemini' || p.id === 'openrouter'));
       if (got || k === models.length - 1 || !retry) throw e;
-      window.dispatchEvent(new CustomEvent('ai-info', { detail: e.status === 429 ? `${p.name} : ${model} a fini son quota du jour, je passe à ${models[k + 1]} (rien à faire)` : `${p.name} : ${model} ${e.status === 404 ? 'indisponible' : 'surchargé'}, j'essaie ${models[k + 1]}` }));
+      window.dispatchEvent(new CustomEvent('ai-info', { detail: e.status === 429 ? (p.id === 'openrouter' ? `${p.name} : ${model} saturé, j'essaie ${models[k + 1]}` : `${p.name} : ${model} a fini son quota du jour, je passe à ${models[k + 1]} (rien à faire)`) : `${p.name} : ${model} ${e.status === 404 ? 'indisponible' : 'surchargé'}, j'essaie ${models[k + 1]}` }));
       if (e.status === 503) await new Promise(r => setTimeout(r, 800));
     } finally {
       clearTimeout(timer);

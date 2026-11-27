@@ -1,6 +1,6 @@
 // Service worker : l'app s'ouvre même sans réseau (les IA, elles, ont besoin d'Internet).
 // Pour publier une mise à jour, change le numéro de VERSION.
-const VERSION = 'sudo-v15';
+const VERSION = 'sudo-v17';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/sudo.css',
   'js/app.js', 'js/ai.js', 'js/chat.js', 'js/compare.js', 'js/diagram.js', 'js/domains.js', 'js/md.js',

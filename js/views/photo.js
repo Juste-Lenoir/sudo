@@ -170,7 +170,7 @@ async function runAnalysis(out, { images, context, mode, question, onResult }) {
     await onResult?.(r);
     return r;
   } catch (e) {
-    out.innerHTML = `<div class="card"><p>L'analyse n'a pas marché : ${esc(e.message)}</p><p class="small muted">Il faut une IA qui lit les photos (Gemini, Mistral, OpenRouter ou une IA payante).</p></div>`;
+    out.innerHTML = `<div class="card"><p>L'analyse n'a pas marché : ${esc(e.message)}</p><p class="small muted">Il faut une IA qui lit les photos (Gemini, OpenRouter ou une IA payante).</p></div>`;
     return null;
   }
 }
