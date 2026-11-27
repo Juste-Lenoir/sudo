@@ -8,6 +8,7 @@ import { record, weakPoints } from '../progress.js';
 import { addCards } from '../srs.js';
 import { illusHTML, loadPhotos } from '../illus.js';
 import { DOMAINS, domain } from '../domains.js';
+import { BANK } from '../quiz-bank.js';
 import { md } from '../md.js';
 import { $, $$, esc, icon, paintIcons, toast, loading, domainOptions, domainTag, fmtDate, params } from '../ui.js';
 
@@ -27,14 +28,15 @@ export async function quizView(v) {
   // Quiz en cours : gardé sur l'appareil pour le retrouver après être allé sur une autre page.
   const RUN = 'quiz-run';
   const saved = await getKV(RUN, null);
-  const pending = saved && past.find(q => q.id === saved.quizId) ? saved : null;
+  const runQuiz = st => st && (st.quiz || past.find(q => q.id === st.quizId));
+  const pending = runQuiz(saved) ? saved : null;
 
   function setup() {
     const domFiches = fiches.filter(f => f.domaine === opt.dom);
     v.innerHTML = `
       <div class="row" style="margin-bottom:12px"><a class="icon-btn" href="#/reviser" aria-label="Retour">${icon('back')}</a><h1 style="margin:0">Quiz</h1></div>
       <div class="stack" style="max-width:760px">
-        ${pending ? `<div class="card row"><div class="grow" style="min-width:0"><strong>Quiz en cours</strong><div class="small muted">${esc(past.find(q => q.id === pending.quizId).titre)} · question ${pending.i + 1}/${pending.qs.length}</div></div><button class="btn primary" data-resume>${icon('play')}Reprendre</button></div>` : ''}
+        ${pending ? `<div class="card row"><div class="grow" style="min-width:0"><strong>Quiz en cours</strong><div class="small muted">${esc(runQuiz(pending).titre)} · question ${pending.i + 1}/${pending.qs.length}</div></div><button class="btn primary" data-resume>${icon('play')}Reprendre</button></div>` : ''}
         <div class="seg"><button data-src="sujet" class="${opt.src === 'sujet' ? 'on' : ''}">Sur un sujet</button><button data-src="carnet" class="${opt.src === 'carnet' ? 'on' : ''}">Depuis mon carnet</button></div>
         <div class="card stack">
           <label class="field">Domaine<select class="input" data-dom>${domainOptions(opt.dom)}</select></label>
@@ -51,7 +53,8 @@ export async function quizView(v) {
           <label class="check" style="padding:0"><input type="checkbox" data-weak ${opt.weak ? 'checked' : ''}><span>Insister sur mes points faibles</span></label>
         </div>
         <button class="btn primary big block" data-go>${icon('play')}Générer le quiz</button>
-        <p class="small muted" style="margin:0">Une seule requête à l'IA rapide. Chaque quiz est gardé : le refaire ne consomme pas de quota.</p>
+        <button class="btn big block" data-bank>${icon('rotate')}Quiz sans IA (${bankFor(opt.dom).length} questions ${esc(domain(opt.dom).name)})</button>
+        <p class="small muted" style="margin:0">Générer : une seule requête à l'IA rapide, et le quiz est gardé. Sans IA : questions mélangées de la banque intégrée et de tes quiz déjà faits. Marche hors ligne et ne consomme aucun quota.</p>
         ${past.length ? `<div><div class="label">Mes quiz</div><div class="list">${past.slice(0, 12).map(q => {
           const best = Math.max(...(q.runs || []).map(r => r.note), -1);
           return `<div class="item"><span class="dotc" style="--c:${domain(q.domain).color}"></span><a class="grow" href="#/quiz" data-replay="${q.id}" style="color:var(--text);min-width:0"><span class="t">${esc(q.titre)}</span><span class="s" style="display:block">${fmtDate(q.createdAt)} · ${q.questions.length} questions${(q.runs || []).length ? ` · ${q.runs.length} essai${q.runs.length > 1 ? 's' : ''}` : ''}</span></a>
@@ -66,7 +69,8 @@ export async function quizView(v) {
     $('[data-exam]', v).onchange = e => { opt.exam = e.target.checked; };
     $('[data-weak]', v).onchange = e => { opt.weak = e.target.checked; };
     $('[data-go]', v).onclick = generate;
-    $('[data-resume]', v)?.addEventListener('click', () => run(past.find(q => q.id === pending.quizId), false, pending));
+    $('[data-bank]', v).onclick = bankQuiz;
+    $('[data-resume]', v)?.addEventListener('click', () => run(runQuiz(pending), false, pending));
     v.querySelectorAll('[data-replay]').forEach(a => a.onclick = async e => { e.preventDefault(); const q = await get('quizzes', a.dataset.replay); run(q, true); });
     v.querySelectorAll('[data-delq]').forEach(b => b.onclick = async () => { if (confirm('Supprimer ce quiz ?')) { await del('quizzes', b.dataset.delq); const i = past.findIndex(x => x.id === b.dataset.delq); past.splice(i, 1); setup(); } });
     paintIcons(v);
@@ -92,9 +96,28 @@ export async function quizView(v) {
       await put('quizzes', quiz);
       run(quiz, false);
     } catch (e) {
-      v.innerHTML = `<div class="card stack" style="max-width:640px"><p style="margin:0">Le quiz n'a pas pu être préparé : ${esc(e.message)}</p><button class="btn" data-back>Retour</button></div>`;
+      v.innerHTML = `<div class="card stack" style="max-width:640px"><p style="margin:0">Le quiz n'a pas pu être préparé : ${esc(e.message)}</p>
+        <div class="row"><button class="btn primary" data-bank>${icon('rotate')}Faire un quiz sans IA</button><button class="btn" data-back>Retour</button></div></div>`;
+      paintIcons(v);
       $('[data-back]', v).onclick = setup;
+      $('[data-bank]', v).onclick = bankQuiz;
     }
+  }
+
+  // ----- Quiz sans IA : banque intégrée + questions des quiz déjà générés -----
+  function bankFor(dom) {
+    const seen = new Set();
+    const mine = past.filter(q => q.domain === dom).flatMap(q => q.questions.map(x => ({ ...x, domain: q.domain })));
+    return [...mine, ...BANK.filter(x => x.domain === dom)].filter(x => { const k = x.q.trim().toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+  }
+  async function bankQuiz() {
+    const pool = bankFor(opt.dom);
+    if (!pool.length) { toast('Aucune question pour ce domaine : choisis-en un autre'); return; }
+    const weak = new Set((await weakPoints(30)).filter(w => w.domain === opt.dom).map(w => w.label.toLowerCase()));
+    // Points faibles d'abord (si demandé), puis le reste au hasard.
+    const sorted = opt.weak ? [...shuffle(pool.filter(x => weak.has((x.notion || x.q).toLowerCase()))), ...shuffle(pool.filter(x => !weak.has((x.notion || x.q).toLowerCase())))] : shuffle(pool);
+    const quiz = { id: 'bank-' + uid(), temp: true, createdAt: Date.now(), titre: 'Quiz sans IA · ' + domain(opt.dom).name, domain: opt.dom, questions: sorted.slice(0, opt.n), runs: [] };
+    run(quiz, true);
   }
 
   // ----- Passage du quiz -----
@@ -106,7 +129,7 @@ export async function quizView(v) {
     });
     const exam = resume ? resume.exam : opt.exam;
     let i = resume ? Math.min(resume.i, qs.length - 1) : 0, deadline = resume ? resume.deadline : exam ? Date.now() + qs.length * SEC_PER_Q * 1000 : 0, timer = 0;
-    const keep = () => setKV(RUN, { quizId: quiz.id, qs, i, exam, deadline });
+    const keep = () => setKV(RUN, { quizId: quiz.id, quiz: quiz.temp ? quiz : undefined, qs, i, exam, deadline });
     const forget = () => setKV(RUN, null);
 
     const draw = () => {
@@ -168,7 +191,7 @@ export async function quizView(v) {
       const good = qs.filter(q => q.rep === q.bonne).length;
       const note = Math.round(good / qs.length * 20 * 2) / 2;
       quiz.runs = [...(quiz.runs || []), { ts: Date.now(), note, exam, good, n: qs.length }];
-      await put('quizzes', quiz);
+      if (!quiz.temp) await put('quizzes', quiz);
       await record(quiz.domain, qs.map(q => ({ label: q.notion || q.q, ok: q.rep === q.bonne })));
       const wrong = qs.filter(q => q.rep !== q.bonne);
       v.innerHTML = `
@@ -191,7 +214,7 @@ export async function quizView(v) {
         </div>`;
       paintIcons(v);
       loadPhotos(v);
-      $('[data-again]', v).onclick = () => run(quiz, true);
+      $('[data-again]', v).onclick = () => (quiz.temp ? bankQuiz() : run(quiz, true));
       $('[data-new]', v).onclick = setup;
       $('[data-tocards]', v)?.addEventListener('click', async e => {
         const btn = e.currentTarget;
@@ -204,6 +227,6 @@ export async function quizView(v) {
   }
 
   // Retour sur la page Quiz sans demande précise : on reprend le quiz là où il en était.
-  if (pending && !p.fiche && !p.sujet && !p.examen) run(past.find(q => q.id === pending.quizId), false, pending);
+  if (pending && !p.fiche && !p.sujet && !p.examen) run(runQuiz(pending), false, pending);
   else setup();
 }

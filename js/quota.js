@@ -1,6 +1,6 @@
 // Indicateur de quota visible partout + détail de la consommation.
 import { getAI, getUsage, readyProviders, remaining, topLastWeek, todayOf, monthCost, dayKey, P, cappedUntil } from './ai.js';
-import { $, esc, sheet } from './ui.js';
+import { $, esc, sheet, toast } from './ui.js';
 
 const level = r => (r > 0.5 ? '' : r > 0.2 ? 'mid' : 'low');
 const pct = r => Math.round(r * 100) + ' %';
@@ -16,6 +16,12 @@ async function current() {
 
 export async function paintQuota() {
   const el = $('#quota');
+  if (!navigator.onLine) {
+    el.className = 'quota none';
+    el.innerHTML = '<span class="dot"></span>Hors ligne';
+    el.title = 'Pas de réseau. Marchent quand même : flashcards, quiz sans IA, sous-réseaux, aide-mémoire, carnet, Réparer pas à pas. Tes questions et photos attendent le retour du réseau.';
+    return;
+  }
   const { s, u, ready, id } = await current();
   if (!ready.length) {
     el.className = 'quota none';
@@ -76,5 +82,7 @@ export function setupQuota() {
   $('#quota').addEventListener('click', openQuota);
   ['usage-changed', 'ai-changed'].forEach(e => window.addEventListener(e, paintQuota));
   window.addEventListener('ai-fallback', paintQuota);
+  window.addEventListener('online', paintQuota);
+  window.addEventListener('offline', () => { paintQuota(); toast('Hors ligne : tes demandes à l’IA attendront le retour du réseau', 4000); });
   paintQuota();
 }

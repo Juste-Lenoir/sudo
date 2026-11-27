@@ -20,7 +20,7 @@ import { setup as setupReminders } from './notify.js';
 import { compteView } from './views/compte.js';
 import { rejoindreView } from './views/groupe.js';
 import { startSync, handleAuthHash, status as syncStatus } from './sync.js';
-import { receivedPhoto } from './views/photo.js';
+import { receivedPhoto, processPendingPhotos } from './views/photo.js';
 import { reparerList, reparerNew, reparationView } from './views/reparer.js';
 
 const ROUTES = [
@@ -121,6 +121,9 @@ window.addEventListener('sudo:changed', () => {
 });
 // Photo envoyée depuis le téléphone
 window.addEventListener('sudo:photo', e => receivedPhoto(e.detail));
+// Retour du réseau : on envoie ce qui attendait (photos à analyser).
+window.addEventListener('online', () => { processPendingPhotos(); });
+setTimeout(processPendingPhotos, 3000);
 // Témoin de synchro dans la barre du haut
 const syncBtn = $('#sync');
 const paintSync = st => { if (!syncBtn) return; syncBtn.hidden = st.status === 'off'; syncBtn.dataset.s = st.status; syncBtn.title = { ok: 'Synchronisé', idle: 'Synchronisé', syncing: 'Synchronisation…', offline: 'Hors ligne : en attente', error: 'Erreur de synchronisation' }[st.status] || ''; syncBtn.setAttribute('aria-label', syncBtn.title); };

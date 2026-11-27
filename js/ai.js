@@ -13,13 +13,21 @@ export const PROVIDERS = [
     limits: { rpd: 1000, tpd: 100000 }, reset: 'sur 24 h glissantes',
     keyUrl: 'https://console.groq.com/keys', help: 'Ultra-rapide : parfaite pour les petites tâches et le 2e avis. Ne lit pas les photos.' },
   { id: 'openrouter', name: 'OpenRouter', full: 'OpenRouter', type: 'openai', free: true, vision: true,
-    base: 'https://openrouter.ai/api/v1', model: 'meta-llama/llama-3.3-70b-instruct:free',
+    base: 'https://openrouter.ai/api/v1', model: 'google/gemma-4-31b-it:free', alt: ['nvidia/nemotron-3.5-super-vl:free', 'google/gemma-4-26b-a4b-it:free'],
     limits: { rpd: 50 }, reset: 'minuit UTC (1 h en France)',
     keyUrl: 'https://openrouter.ai/keys', help: 'Une clé pour beaucoup de modèles. Les modèles « :free » sont gratuits, mais le quota est petit.' },
   { id: 'mistral', name: 'Mistral', full: 'Mistral AI', type: 'openai', free: true, vision: true,
     base: 'https://api.mistral.ai/v1', model: 'mistral-small-latest',
     limits: { rpd: 2000 }, reset: 'limite surtout par minute',
     keyUrl: 'https://console.mistral.ai/api-keys', help: 'IA française, offre gratuite « Experiment ». Lit les photos.' },
+  { id: 'cerebras', name: 'Cerebras', full: 'Cerebras', type: 'openai', free: true, vision: false,
+    base: 'https://api.cerebras.ai/v1', model: 'gpt-oss-120b', alt: ['qwen-3.8-27b'],
+    limits: { rpd: 14400, tpd: 1000000 }, reset: 'sur 24 h',
+    keyUrl: 'https://cloud.cerebras.ai/', help: 'Gratuite et ultra-rapide, gros quota par jour : la meilleure IA de secours pour les quiz et les petites tâches. Ne lit pas les photos.' },
+  { id: 'cohere', name: 'Cohere', full: 'Cohere', type: 'openai', free: true, vision: false,
+    base: 'https://api.cohere.ai/compatibility/v1', model: 'command-a-plus-05-2026', alt: ['command-a-03-2025'],
+    limits: { rpd: 33 }, reset: '1 000 demandes par mois (clé d’essai)',
+    keyUrl: 'https://dashboard.cohere.com/api-keys', help: 'Clé d’essai gratuite (1 000 demandes par mois, usage personnel). Une IA de secours de plus. Ne lit pas les photos.' },
   { id: 'ollama', name: 'Ollama', full: 'Ollama (IA locale sur ton Mac)', type: 'openai', free: true, vision: true, noKey: true, local: true,
     base: 'http://localhost:11434/v1', model: 'gemma4:12b', limits: {}, reset: 'illimité',
     keyUrl: 'https://ollama.com/download', help: "Gratuite, illimitée et hors ligne, mais seulement sur le Mac où Ollama tourne (pas sur l'iPhone). « Lister » montre tes modèles installés." },
@@ -38,7 +46,7 @@ const readCapped = () => { try { const x = JSON.parse(localStorage.getItem('sudo
 const markCapped = (m, until) => { try { const x = readCapped(); x[m] = until; localStorage.setItem('sudo-mquota', JSON.stringify(x)); } catch {} };
 // Le modèle principal de cette IA est à sa limite du jour (sudo passe par un autre modèle) : jusqu'à quand.
 export const cappedUntil = (id, s) => { const m = s?.providers?.[id]?.model; return (m && readCapped()[m]) || 0; };
-const RETIRED = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+const RETIRED = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'meta-llama/llama-3.3-70b-instruct:free'];
 export const P = id => PROVIDERS.find(p => p.id === id);
 
 // Quelle IA pour quelle tâche (ménage les quotas) : « rapide » pour les petites tâches,

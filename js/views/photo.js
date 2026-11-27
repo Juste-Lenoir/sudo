@@ -2,7 +2,7 @@
 // photo annotée (étiquettes déplaçables pour corriger l'IA).
 import { askJSON } from '../ai.js';
 import { base, photoPrompt, PHOTO_MODES } from '../prompts.js';
-import { dbAll, put, del, uid, getProfile } from '../store.js';
+import { dbAll, put, del, uid, getProfile, getKV, setKV } from '../store.js';
 import { md } from '../md.js';
 import { $, esc, toast, icon, pickImages, loadImage, download, paintIcons, loading, compressImage, fmtDate, sheet } from '../ui.js';
 import { account, sendPhotos } from '../sync.js';
@@ -180,7 +180,7 @@ export async function photoView(v) {
   let images = inbox; inbox = [];
   let mode = 'identifier';
   const acc = await account();
-  const history = (await dbAll('photos')).sort((a, b) => b.ts - a.ts).slice(0, 12);
+  const history = [...await getKV('photo-queue', []), ...(await dbAll('photos')).sort((a, b) => b.ts - a.ts).slice(0, 12)];
   const ateliers = (await dbAll('ateliers')).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 15);
   v.innerHTML = `
     <h1>Photo</h1>
@@ -201,7 +201,7 @@ export async function photoView(v) {
       <button class="btn primary big block" data-go disabled>Analyser</button>
       ${acc ? `<button class="btn block" data-send disabled>${icon('share')}Envoyer à l’ordinateur</button>` : ''}
       <div data-out></div>
-      ${history.length ? `<div><div class="label" style="margin-top:18px">Dernières analyses</div><div class="list">${history.map(h => `<button class="item" data-hist="${h.id}"><img src="${esc(h.src)}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:8px"><div class="grow"><div class="t">${esc(h.r?.resume || 'Photo')}</div><div class="s">${fmtDate(h.ts)} · ${esc(PHOTO_MODES[h.mode]?.label || '')}</div></div></button>`).join('')}</div></div>` : ''}
+      ${history.length ? `<div><div class="label" style="margin-top:18px">Dernières analyses</div><div class="list">${history.map(h => `<button class="item" data-hist="${h.id}"><img src="${esc(h.src)}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:8px"><div class="grow"><div class="t">${h.pending ? 'En attente du réseau' : esc(h.r?.resume || 'Photo')}</div><div class="s">${fmtDate(h.ts)} · ${esc(PHOTO_MODES[h.mode]?.label || '')}</div></div></button>`).join('')}</div></div>` : ''}
     </div>`;
   const drop = $('[data-drop]', v), go = $('[data-go]', v);
   const drawImgs = () => {
@@ -255,6 +255,16 @@ export async function photoView(v) {
     go.disabled = true;
     const shots = images.slice();
     const out = $('[data-out]', v);
+    // Hors ligne : la photo est gardée et analysée au retour du réseau.
+    if (!navigator.onLine) {
+      // File d'attente propre à cet appareil (pas synchronisée : un seul appareil l'analyse).
+      const queue = await getKV('photo-queue', []);
+      queue.push({ id: uid(), ts: Date.now(), src: shots[0], images: shots, mode, q, context, pending: true });
+      await setKV('photo-queue', queue);
+      toast('Pas de réseau : photo gardée, elle sera analysée au retour de la connexion', 5000);
+      images = []; photoView(v);
+      return;
+    }
     const r = await runAnalysis(out, { images: shots, context, mode, question: q });
     go.disabled = false;
     if (!r) return;
@@ -279,10 +289,36 @@ export async function photoView(v) {
     if (!h) return;
     const rec = history.find(x => x.id === h.dataset.hist);
     const { sheet } = await import('../ui.js');
+    if (rec.pending) {
+      const sh = sheet(`<div class="row"><h2 style="margin:0">Photo en attente</h2><span class="grow"></span><button class="icon-btn" data-close aria-label="Fermer">${icon('x')}</button></div><img src="${esc(rec.src)}" alt="" style="max-width:100%;border-radius:12px;margin-top:12px"><p class="small muted">Elle sera analysée dès que le réseau revient (sudo ouvert).</p><div class="row"><button class="btn danger" data-delh>${icon('trash')}Supprimer</button></div>`);
+      $('[data-delh]', sh.el).onclick = async () => { await setKV('photo-queue', (await getKV('photo-queue', [])).filter(x => x.id !== rec.id)); sh.close(); photoView(v); };
+      return;
+    }
     const sh = sheet(`<div class="row"><h2 style="margin:0">Analyse du ${fmtDate(rec.ts)}</h2><span class="grow"></span><button class="icon-btn" data-close aria-label="Fermer">${icon('x')}</button></div><div style="margin-top:12px">${resultHTML(rec.r, rec.src)}</div><div class="row" style="margin-top:12px"><button class="btn danger" data-delh>${icon('trash')}Supprimer</button></div>`);
     dragLabels($('[data-annot]', sh.el), rec.r.elements || [], () => put('photos', rec));
     $('[data-delh]', sh.el).onclick = async () => { await del('photos', rec.id); sh.close(); photoView(v); };
   });
   if (images.length) drawImgs();
   paintIcons(v);
+}
+
+// Photos gardées hors ligne : analysées dès que le réseau revient.
+let flushing = false;
+export async function processPendingPhotos() {
+  if (flushing || !navigator.onLine) return;
+  flushing = true;
+  try {
+    const list = await getKV('photo-queue', []);
+    for (const rec of list) {
+      try {
+        const prof = await getProfile();
+        const r = await askJSON({ system: base(prof), prompt: photoPrompt(rec.mode, rec.q, rec.context || ''), images: rec.images || [rec.src], task: 'best', needBoxes: true });
+        r.elements = (r.elements || []).filter(e => e && e.nom);
+        const done = { id: rec.id, ts: rec.ts, src: rec.src, mode: rec.mode, q: rec.q, r };
+        await put('photos', done);
+        await setKV('photo-queue', (await getKV('photo-queue', [])).filter(x => x.id !== rec.id));
+        toast('Photo en attente analysée : voir Photo → Dernières analyses', 5000);
+      } catch (e) { if (!navigator.onLine) break; toast('Photo en attente : ' + e.message, 5000); break; }
+    }
+  } finally { flushing = false; }
 }

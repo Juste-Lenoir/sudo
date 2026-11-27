@@ -57,6 +57,7 @@ export function mountChat(root, { messages, system, save, quick = [], placeholde
     if (m.role === 'user') {
       return `<div class="msg user">${m.images?.length ? `<div class="msg-imgs">${m.images.map(u => `<img src="${esc(u)}" alt="photo jointe">`).join('')}</div>` : ''}${m.text ? `<div>${esc(m.text).replace(/\n/g, '<br>')}</div>` : ''}</div>`;
     }
+    if (m.queued) return `<div class="msg ai queued"><div class="msg-body small muted">${icon('cloud')} Pas de réseau : ta demande est gardée et partira toute seule au retour de la connexion.</div></div>`;
     const live = busy && i === streamingIdx;
     const data = !live && readData(m.text);
     const ok = data?.valider?.length ? `<div class="msg-ok">${icon('check')}Étape${data.valider.length > 1 ? 's' : ''} ${data.valider.join(', ')} validée${data.valider.length > 1 ? 's' : ''}</div>` : '';
@@ -80,6 +81,7 @@ export function mountChat(root, { messages, system, save, quick = [], placeholde
   }
 
   async function runAI(ai, ctx, sys, opts = {}) {
+    delete ai.queued;
     streamingIdx = messages.indexOf(ai);
     busy = new AbortController();
     setBusy(true);
@@ -112,8 +114,23 @@ export function mountChat(root, { messages, system, save, quick = [], placeholde
     messages.push({ role: 'user', text, images, ts: Date.now() });
     const ai = { role: 'assistant', text: '', ts: Date.now() };
     messages.push(ai);
+    // Hors ligne : la demande attend le retour du réseau (rien n'est perdu).
+    if (!navigator.onLine) { ai.queued = true; renderAll(); await save?.(); return; }
     await runAI(ai, context(messages.slice(0, -1)), await system());
   }
+
+  // Demandes en attente : envoyées dès que le réseau revient (si la page est toujours affichée).
+  async function flushQueued() {
+    if (busy || !navigator.onLine || !document.body.contains(root)) return;
+    const i = messages.findIndex(m => m.queued);
+    if (i < 0) return;
+    toast('Réseau revenu : envoi de ta demande en attente');
+    await runAI(messages[i], context(messages.slice(0, i)), await system());
+    flushQueued();
+  }
+  const onOnline = () => { if (!document.body.contains(root)) return window.removeEventListener('online', onOnline); flushQueued(); };
+  window.addEventListener('online', onOnline);
+  setTimeout(flushQueued, 600);
 
   async function secondOpinion(i) {
     if (busy) return;
