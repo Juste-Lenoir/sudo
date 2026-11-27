@@ -1,7 +1,7 @@
 // Quiz : générés par l'IA sur un sujet ou depuis le carnet, questions illustrées,
 // mode entraînement (correction immédiate) ou examen chronométré. Les quiz sont gardés
 // pour être refaits sans consommer de quota.
-import { dbAll, get, put, del, uid, getProfile } from '../store.js';
+import { dbAll, get, put, del, uid, getProfile, getKV, setKV } from '../store.js';
 import { askJSON } from '../ai.js';
 import { base, quizPrompt } from '../prompts.js';
 import { record, weakPoints } from '../progress.js';
@@ -24,11 +24,17 @@ export async function quizView(v) {
     n: 10, niveau: 'moyen', exam: !!p.examen, weak: true, fiches: new Set(p.fiche ? [p.fiche] : []),
   };
 
+  // Quiz en cours : gardé sur l'appareil pour le retrouver après être allé sur une autre page.
+  const RUN = 'quiz-run';
+  const saved = await getKV(RUN, null);
+  const pending = saved && past.find(q => q.id === saved.quizId) ? saved : null;
+
   function setup() {
     const domFiches = fiches.filter(f => f.domaine === opt.dom);
     v.innerHTML = `
       <div class="row" style="margin-bottom:12px"><a class="icon-btn" href="#/reviser" aria-label="Retour">${icon('back')}</a><h1 style="margin:0">Quiz</h1></div>
       <div class="stack" style="max-width:760px">
+        ${pending ? `<div class="card row"><div class="grow" style="min-width:0"><strong>Quiz en cours</strong><div class="small muted">${esc(past.find(q => q.id === pending.quizId).titre)} · question ${pending.i + 1}/${pending.qs.length}</div></div><button class="btn primary" data-resume>${icon('play')}Reprendre</button></div>` : ''}
         <div class="seg"><button data-src="sujet" class="${opt.src === 'sujet' ? 'on' : ''}">Sur un sujet</button><button data-src="carnet" class="${opt.src === 'carnet' ? 'on' : ''}">Depuis mon carnet</button></div>
         <div class="card stack">
           <label class="field">Domaine<select class="input" data-dom>${domainOptions(opt.dom)}</select></label>
@@ -60,6 +66,7 @@ export async function quizView(v) {
     $('[data-exam]', v).onchange = e => { opt.exam = e.target.checked; };
     $('[data-weak]', v).onchange = e => { opt.weak = e.target.checked; };
     $('[data-go]', v).onclick = generate;
+    $('[data-resume]', v)?.addEventListener('click', () => run(past.find(q => q.id === pending.quizId), false, pending));
     v.querySelectorAll('[data-replay]').forEach(a => a.onclick = async e => { e.preventDefault(); const q = await get('quizzes', a.dataset.replay); run(q, true); });
     v.querySelectorAll('[data-delq]').forEach(b => b.onclick = async () => { if (confirm('Supprimer ce quiz ?')) { await del('quizzes', b.dataset.delq); const i = past.findIndex(x => x.id === b.dataset.delq); past.splice(i, 1); setup(); } });
     paintIcons(v);
@@ -91,16 +98,19 @@ export async function quizView(v) {
   }
 
   // ----- Passage du quiz -----
-  function run(quiz, replay) {
+  function run(quiz, replay, resume) {
     // Un quiz refait : questions et choix mélangés.
-    const qs = (replay ? shuffle(quiz.questions) : quiz.questions).map(q => {
+    const qs = resume ? resume.qs : (replay ? shuffle(quiz.questions) : quiz.questions).map(q => {
       const order = replay ? shuffle(q.choix.map((_, i) => i)) : q.choix.map((_, i) => i);
       return { ...q, choix: order.map(i => q.choix[i]), bonne: order.indexOf(q.bonne), rep: null };
     });
-    const exam = opt.exam;
-    let i = 0, deadline = exam ? Date.now() + qs.length * SEC_PER_Q * 1000 : 0, timer = 0;
+    const exam = resume ? resume.exam : opt.exam;
+    let i = resume ? Math.min(resume.i, qs.length - 1) : 0, deadline = resume ? resume.deadline : exam ? Date.now() + qs.length * SEC_PER_Q * 1000 : 0, timer = 0;
+    const keep = () => setKV(RUN, { quizId: quiz.id, qs, i, exam, deadline });
+    const forget = () => setKV(RUN, null);
 
     const draw = () => {
+      keep();
       const q = qs[i];
       const answered = q.rep != null;
       v.innerHTML = `
@@ -128,7 +138,7 @@ export async function quizView(v) {
       $$('[data-c]', v).forEach(b => b.onclick = () => { if (answered && !exam) return; q.rep = +b.dataset.c; if (exam) { draw(); } else draw(); });
       $('[data-next]', v)?.addEventListener('click', next);
       $('[data-prev]', v)?.addEventListener('click', () => { i--; draw(); });
-      $('[data-quit]', v).onclick = () => { if (qs.some(x => x.rep != null) && !confirm('Quitter ce quiz ? Il reste dans « Mes quiz ».')) return; stop(); setup(); };
+      $('[data-quit]', v).onclick = () => { if (qs.some(x => x.rep != null) && !confirm('Quitter ce quiz ? Il reste dans « Mes quiz ».')) return; stop(); forget().then(() => quizView(v)); };
       tick();
     };
     const next = () => { if (i < qs.length - 1) { i++; draw(); window.scrollTo(0, 0); } else finish(); };
@@ -154,6 +164,7 @@ export async function quizView(v) {
 
     async function finish() {
       stop();
+      await forget();
       const good = qs.filter(q => q.rep === q.bonne).length;
       const note = Math.round(good / qs.length * 20 * 2) / 2;
       quiz.runs = [...(quiz.runs || []), { ts: Date.now(), note, exam, good, n: qs.length }];
@@ -192,5 +203,7 @@ export async function quizView(v) {
     draw();
   }
 
-  setup();
+  // Retour sur la page Quiz sans demande précise : on reprend le quiz là où il en était.
+  if (pending && !p.fiche && !p.sujet && !p.examen) run(past.find(q => q.id === pending.quizId), false, pending);
+  else setup();
 }
