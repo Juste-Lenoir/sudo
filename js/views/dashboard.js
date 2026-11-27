@@ -83,7 +83,7 @@ export async function hubView(v, which = 'reviser') {
       ${tile('#/carnet', 'list', 'Carnet', `${fiches.length} fiche${fiches.length > 1 ? 's' : ''} technique${fiches.length > 1 ? 's' : ''}`)}
       ${tile('#/sous-reseaux?tab=calc', 'table', 'Calculatrice IPv4', 'Découpage binaire, hors ligne')}
     </div>`;
-  const desktop = matchMedia('(min-width: 760px)').matches;
+  const desktop = matchMedia('(min-width: 700px)').matches;
   v.innerHTML = `
     <div class="row" style="margin-bottom:14px"><h1 style="margin:0">${which === 'outils' && desktop ? 'Outils' : 'Réviser'}</h1><span class="grow"></span></div>
     <div class="stack" style="max-width:900px">
