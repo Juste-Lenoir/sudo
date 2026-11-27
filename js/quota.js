@@ -33,7 +33,7 @@ export async function paintQuota() {
   const r = remaining(s, u, id);
   const cap = !r.blocked && cappedUntil(id, s);
   el.className = 'quota ' + (cap ? 'mid' : level(r.ratio));
-  el.innerHTML = `<span class="dot"></span>${esc(p.name)}${p.paid || id === 'ollama' ? '' : ' · ' + (cap ? 'modèle de relais' : (r.exact ? '' : '~') + pct(r.ratio))}`;
+  el.innerHTML = `<span class="dot"></span>${esc(p.name)}${p.paid || id === 'ollama' ? '' : ' · ' + (cap ? 'relais' : (r.exact ? '' : '~') + pct(r.ratio))}`;
   el.title = cap ? `${p.full} : le modèle principal a fini son quota du jour, sudo utilise un autre modèle jusqu'à ${hm(cap)}.` : `IA en cours : ${p.full}. Clique pour voir la consommation.`;
 }
 

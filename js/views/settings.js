@@ -52,6 +52,7 @@ export async function settingsView(v) {
       <div>
         <h2>Intelligences artificielles</h2>
         <p class="small muted">Commence par <strong>Gemini</strong> (gratuite, lit les photos), puis ajoute <strong>Groq</strong> pour les petites tâches et le 2ᵉ avis. Tes clés restent sur cet appareil.</p>
+        <div class="row" style="margin-bottom:10px"><button class="btn ghost" data-allon>${icon('check')}Tout activer</button><button class="btn ghost" data-alloff>${icon('x')}Tout désactiver</button><span class="small muted">Tout activer : seulement les IA qui ont une clé.</span></div>
         <div class="stack" data-provs>${PROVIDERS.map(provCard).join('')}</div>
       </div>
 
@@ -84,6 +85,15 @@ export async function settingsView(v) {
   $('[data-primary]', v).onchange = async e => { s.primary = e.target.value; await persist(); };
   v.querySelectorAll('[data-route]').forEach(sel => sel.onchange = async () => { s.routes[sel.dataset.route] = sel.value; await persist(); });
   $('[data-budget]', v).onchange = async e => { s.budget = Math.max(0, +e.target.value || 0); await persist(); };
+
+  const setAll = async on => {
+    for (const p of PROVIDERS) { const c = s.providers[p.id]; c.enabled = on && !!c.key && !p.noKey; }
+    await persist();
+    settingsView(v);
+    toast(on ? 'IA avec une clé activées' : 'Toutes les IA désactivées');
+  };
+  $('[data-allon]', v).onclick = () => setAll(true);
+  $('[data-alloff]', v).onclick = () => setAll(false);
 
   $('[data-provs]', v).addEventListener('change', async e => {
     const card = e.target.closest('[data-p]');

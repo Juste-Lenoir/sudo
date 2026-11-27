@@ -60,6 +60,8 @@ async function render() {
     const m = path.match(re);
     if (!m) continue;
     $$('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav.split(' ').includes(nav)));
+    const first = path.split('/')[0];
+    $$('[data-path]').forEach(a => a.classList.toggle('active', a.dataset.path === '' ? path === '' : a.dataset.path.split(' ').includes(first)));
     // Nouvel élément à chaque page : aucun écouteur ne traîne d'une page à l'autre.
     const old = $('#view');
     const v = document.createElement('main');
