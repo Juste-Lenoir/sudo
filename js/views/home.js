@@ -7,7 +7,8 @@ import { summary, ringsSVG, RINGS, RING_COLORS } from '../progress.js';
 import { context, planFor, getDone, dstr, daysBetween } from '../plan.js';
 
 export async function homeView(v) {
-  const [prof, ats, s, st, fiches] = await Promise.all([getProfile(), dbAll('ateliers'), getAI(), getStreak(), dbAll('carnet')]);
+  const [prof, ats, s, st, fiches, repairs] = await Promise.all([getProfile(), dbAll('ateliers'), getAI(), getStreak(), dbAll('carnet'), dbAll('repairs')]);
+  const openRepairs = repairs.filter(r => !['repare', 'pas_repare'].includes(r.resultat)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   const ready = readyProviders(s);
   const [sum, ctx] = await Promise.all([summary(), context()]);
   const day = dstr(Date.now());
@@ -25,7 +26,7 @@ export async function homeView(v) {
     <div class="small muted" style="text-transform:uppercase;letter-spacing:.4px">${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
     <div class="row" style="margin-bottom:18px"><h1 style="margin:0">${hello}${prof.prenom ? ' ' + esc(prof.prenom) : ''}</h1><span class="grow"></span>
       ${st.streak ? `<span class="tag ok" title="Jours d'activité d'affilée">${st.streak} jour${st.streak > 1 ? 's' : ''} d'affilée</span>` : ''}</div>
-    <div class="stack" style="max-width:900px">
+    <div class="home-grid"><div class="stack">
       ${!ready.length ? `<div class="card stack" style="border:1px solid var(--brand)">
         <h2 style="margin:0">Connecte une IA gratuite</h2>
         <p class="muted" style="margin:0">Il faut une clé Gemini (gratuite, 2 minutes) pour que sudo lise tes consignes et tes photos.</p>
@@ -50,14 +51,18 @@ export async function homeView(v) {
           : `<p class="small muted" style="margin:0">${plan.tasks.length ? 'Révisions du jour terminées.' : 'Rien de prévu : fais un quiz ou ajoute une date d’examen.'}</p>`}
         <div class="row"><a class="btn sm" href="#/planning">Planning</a><a class="btn sm ghost" href="#/reviser">Tout réviser</a>${fiches.length ? `<a class="btn sm ghost" href="#/carnet">Carnet (${fiches.length})</a>` : ''}</div>
       </div>
-      <div class="grid2">
+      ${toCheck.length ? `<div><div class="label">Vérifications</div><div class="list">${toCheck.slice(0, 6).map(a => { const x = statusOf(a); return `<a class="item" href="#/verif/${a.id}"><span class="grow"><span class="t">${esc(a.title)}</span></span><span class="tag ${x.cls}">${x.label}${a.best != null ? ' · ' + a.best + '/20' : ''}</span></a>`; }).join('')}</div></div>` : ''}
+    </div><div class="stack">
+      <div class="quick">
         <a class="card row" style="flex-wrap:nowrap;color:var(--text)" href="#/atelier/nouveau">${icon('plus')}<div class="grow"><strong>Nouvel atelier</strong><div class="small muted">Consigne en photo, dictée ou texte</div></div></a>
         <a class="card row" style="flex-wrap:nowrap;color:var(--text)" href="#/photo">${icon('camera')}<div class="grow"><strong>Analyser une photo</strong><div class="small muted">Composant, câble, port, écran</div></div></a>
         <a class="card row" style="flex-wrap:nowrap;color:var(--text)" href="#/assistant">${icon('chat')}<div class="grow"><strong>Assistant</strong><div class="small muted">Question, panne simulée, oral blanc</div></div></a>
         <a class="card row" style="flex-wrap:nowrap;color:var(--text)" href="#/assistant?mode=compare">${icon('columns')}<div class="grow"><strong>Côte à côte</strong><div class="small muted">Comparer les réponses de 2 ou 3 IA</div></div></a>
+        <a class="card row" style="flex-wrap:nowrap;color:var(--text)" href="#/reparer/nouveau">${icon('wrench')}<div class="grow"><strong>Réparer un appareil</strong><div class="small muted">Sécurité, diagnostic, résumé</div></div></a>
       </div>
-      ${toCheck.length ? `<div><div class="label">Vérifications</div><div class="list">${toCheck.slice(0, 6).map(a => { const x = statusOf(a); return `<a class="item" href="#/verif/${a.id}"><span class="grow"><span class="t">${esc(a.title)}</span></span><span class="tag ${x.cls}">${x.label}${a.best != null ? ' · ' + a.best + '/20' : ''}</span></a>`; }).join('')}</div></div>` : ''}
-    </div>`;
+      ${ats.length ? `<div><div class="label">Derniers ateliers</div><div class="list">${ats.slice(0, 4).map(a => `<a class="item" href="#/atelier/${a.id}"><span class="grow" style="min-width:0"><span class="t">${esc(a.title)}</span></span>${domainTag(a.domain)}</a>`).join('')}</div></div>` : ''}
+      ${openRepairs.length ? `<div><div class="label">Réparations en cours</div><div class="list">${openRepairs.slice(0, 3).map(r => `<a class="item" href="#/reparation/${r.id}"><span class="grow t">${esc([r.marque, r.modele].filter(Boolean).join(' ') || 'Appareil')}</span><span class="small muted">${esc(r.proprio || '')}</span></a>`).join('')}</div></div>` : ''}
+    </div></div>`;
   v.querySelector('[data-focus]')?.addEventListener('click', async e => {
     e.preventDefault();
     const { get, put } = await import('../store.js');

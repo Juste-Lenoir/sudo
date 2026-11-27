@@ -22,6 +22,21 @@ import { rejoindreView } from './views/groupe.js';
 import { startSync, handleAuthHash, status as syncStatus } from './sync.js';
 import { receivedPhoto, processPendingPhotos } from './views/photo.js';
 import { reparerList, reparerNew, reparationView } from './views/reparer.js';
+import { openPalette } from './palette.js';
+import { dbAll, getKV } from './store.js';
+import { dueToday } from './srs.js';
+import { today } from './progress.js';
+
+// Grand écran : la liste reste à gauche, l'élément ouvert s'affiche à droite (comme Mail ou Notes).
+const split = (listFn, detailFn, base) => async (v, id) => {
+  if (!matchMedia('(min-width: 1100px)').matches) return detailFn(v, id);
+  v.classList.add('split');
+  v.innerHTML = '<div class="split-list"></div><div class="split-detail"></div>';
+  const [l, d] = [v.firstElementChild, v.lastElementChild];
+  await listFn(l);
+  l.querySelectorAll(`a[href="${base}${id}"]`).forEach(a => a.classList.add('on'));
+  await detailFn(d, id);
+};
 
 const ROUTES = [
   [/^$/, homeView, 'accueil'],
@@ -42,13 +57,13 @@ const ROUTES = [
   [/^progression$/, dashboardView, 'reviser'],
   [/^terminal$/, terminalView, 'outils'],
   [/^carnet$/, carnetView, 'outils'],
-  [/^fiche\/([\w-]+)$/, ficheView, 'outils'],
+  [/^fiche\/([\w-]+)$/, split(carnetView, ficheView, '#/fiche/'), 'outils'],
   [/^aide-memoire$/, memoView, 'outils'],
   [/^compte$/, compteView, 'reglages'],
   [/^rejoindre$/, rejoindreView, 'ateliers'],
   [/^reparer$/, reparerList, 'outils'],
   [/^reparer\/nouveau$/, reparerNew, 'outils'],
-  [/^reparation\/([\w-]+)$/, reparationView, 'outils'],
+  [/^reparation\/([\w-]+)$/, split(reparerList, reparationView, '#/reparation/'), 'outils'],
 ];
 
 let renderId = 0;
@@ -88,12 +103,46 @@ document.addEventListener('click', e => {
   if (b) copy(b.closest('.code').querySelector('code').textContent);
 });
 
+// Recherche partout (⌘K), même pendant une saisie.
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
+});
+$('#search-btn').addEventListener('click', openPalette);
+
+// Barre latérale : masquable (mémorisé sur l'appareil).
+const SIDE = 'sudo-side-hidden';
+const applySide = hidden => {
+  document.body.classList.toggle('side-hidden', hidden);
+  $('#side-toggle').setAttribute('aria-label', hidden ? 'Afficher la barre latérale' : 'Masquer la barre latérale');
+};
+function toggleSide() {
+  const hidden = !document.body.classList.contains('side-hidden');
+  try { localStorage.setItem(SIDE, hidden ? '1' : ''); } catch { /* sans stockage */ }
+  applySide(hidden);
+}
+try { applySide(localStorage.getItem(SIDE) === '1'); } catch { applySide(false); }
+$('#side-toggle').addEventListener('click', toggleSide);
+
+// Compteurs de la barre latérale.
+async function paintBadges() {
+  const [cards, ats, reps, daily] = await Promise.all([dbAll('cards'), dbAll('ateliers'), dbAll('repairs'), getKV('daily', {})]);
+  const n = {
+    cards: dueToday(cards, daily[today()]?.newCards || 0).all.length,
+    ateliers: ats.filter(a => (a.steps || []).some(x => !x.done)).length,
+    repairs: reps.filter(r => !['repare', 'pas_repare'].includes(r.resultat)).length,
+  };
+  $$('[data-badge]').forEach(b => { const v = n[b.dataset.badge]; b.textContent = v ? (v > 99 ? '99+' : v) : ''; });
+}
+window.addEventListener('hashchange', () => setTimeout(paintBadges, 400));
+window.addEventListener('sudo:changed', paintBadges);
+paintBadges();
+
 // Raccourcis clavier (ordinateur)
 document.addEventListener('keydown', e => {
   if (e.target.closest('input, textarea, select')) return;
   if (/^#\/(flashcards\/revue|quiz)/.test(location.hash) && !e.metaKey && !e.ctrlKey) return; // touches utilisées par ces écrans
   const mod = e.metaKey || e.ctrlKey;
-  if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); location.hash = '#/assistant'; }
+  if (mod && e.key === '\\') { e.preventDefault(); toggleSide(); }
   if (!mod && !e.altKey && e.key === 'n') location.hash = '#/atelier/nouveau';
   if (!mod && !e.altKey && e.key === 'p') location.hash = '#/photo';
   if (!mod && !e.altKey && e.key === 'f') location.hash = '#/flashcards/revue';

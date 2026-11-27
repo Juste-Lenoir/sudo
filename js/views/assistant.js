@@ -37,6 +37,9 @@ export async function assistantView(v) {
     $('[data-new]', v).onclick = async () => { if (!messages.length || confirm('Effacer cette discussion ?')) { st.chats[key()] = []; await setKV('assistant', st); draw(); } };
     $('[data-compare]', v).onclick = () => openCompare({ system: base(prof), onKeep: text => { messages.push({ role: 'assistant', text, providerName: 'Réponse gardée (côte à côte)', ts: Date.now() }); setKV('assistant', st); api.render(); } });
     paintIcons(v);
+    // Question tapée dans la recherche (⌘K) : prête à envoyer.
+    const pre = sessionStorage.getItem('sudo-ask');
+    if (pre) { sessionStorage.removeItem('sudo-ask'); api.setText(pre); }
   }
   draw();
   if (params().mode === 'compare') openCompare({ system: base(prof) });
