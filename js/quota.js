@@ -1,9 +1,10 @@
 // Indicateur de quota visible partout + détail de la consommation.
-import { getAI, getUsage, readyProviders, remaining, topLastWeek, todayOf, monthCost, dayKey, P } from './ai.js';
+import { getAI, getUsage, readyProviders, remaining, topLastWeek, todayOf, monthCost, dayKey, P, cappedUntil } from './ai.js';
 import { $, esc, sheet } from './ui.js';
 
 const level = r => (r > 0.5 ? '' : r > 0.2 ? 'mid' : 'low');
 const pct = r => Math.round(r * 100) + ' %';
+const hm = t => new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
 async function current() {
   const s = await getAI();
@@ -24,9 +25,10 @@ export async function paintQuota() {
   }
   const p = P(id);
   const r = remaining(s, u, id);
-  el.className = 'quota ' + level(r.ratio);
-  el.innerHTML = `<span class="dot"></span>${esc(p.name)}${p.paid || id === 'ollama' ? '' : ' · ' + (r.exact ? '' : '~') + pct(r.ratio)}`;
-  el.title = `IA en cours : ${p.full}. Clique pour voir la consommation.`;
+  const cap = !r.blocked && cappedUntil(id, s);
+  el.className = 'quota ' + (cap ? 'mid' : level(r.ratio));
+  el.innerHTML = `<span class="dot"></span>${esc(p.name)}${p.paid || id === 'ollama' ? '' : ' · ' + (cap ? 'modèle de relais' : (r.exact ? '' : '~') + pct(r.ratio))}`;
+  el.title = cap ? `${p.full} : le modèle principal a fini son quota du jour, sudo utilise un autre modèle jusqu'à ${hm(cap)}.` : `IA en cours : ${p.full}. Clique pour voir la consommation.`;
 }
 
 function weekBars(u, id) {
@@ -54,6 +56,7 @@ export async function openQuota() {
       <div class="row"><strong>${esc(p.full)}</strong><span class="grow"></span>${p.paid || pid === 'ollama' ? '' : `<span class="tag ${level(r.ratio) === 'low' ? 'bad' : level(r.ratio) === 'mid' ? 'mid' : 'ok'}">${r.exact ? '' : '~'}${pct(r.ratio)} restant</span>`}</div>
       ${p.paid || pid === 'ollama' ? '' : `<div class="meter ${level(r.ratio)}"><i style="width:${pct(r.ratio)}"></i></div>`}
       <div class="small muted">Aujourd'hui : ${t.req} requête${t.req > 1 ? 's' : ''} · ~${Math.round((t.inT + t.outT) / 1000)} k tokens · ${r.blocked ? 'limite atteinte' : `limite ${esc(limit)}${r.exact ? ' (donnée par le fournisseur)' : ' (estimation)'}`}</div>
+      ${!r.blocked && cappedUntil(pid, s) ? `<div class="small" style="color:var(--hint)">Modèle principal (${esc(s.providers[pid].model)}) : quota du jour épuisé. sudo passe par un autre modèle ${esc(p.name)} jusqu'à ${hm(cappedUntil(pid, s))}. Le pourcentage ne compte que les demandes de cet appareil.</div>` : ''}
       ${r.blocked ? `<div class="small" style="color:var(--err)">${r.blocked.daily ? 'Quota du jour épuisé selon ' + esc(p.name) : 'Trop de demandes à la minute'} : en pause jusqu'à ${new Date(r.blocked.until).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}. sudo utilise une autre IA en attendant.</div>` : ''}
       <div class="small muted">Remise à zéro : ${esc(p.reset || '?')}</div>
       <div class="label" style="margin:6px 0 0">Semaine précédente</div>

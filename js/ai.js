@@ -9,7 +9,7 @@ export const PROVIDERS = [
     limits: { rpd: 250 }, reset: 'minuit heure du Pacifique (9 h en France)',
     keyUrl: 'https://aistudio.google.com/apikey', help: 'La meilleure gratuite pour les photos et les consignes. À activer en premier.' },
   { id: 'groq', name: 'Groq', full: 'Groq', type: 'openai', free: true, vision: false,
-    base: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile',
+    base: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b', alt: ['openai/gpt-oss-20b', 'qwen/qwen3.8-27b'],
     limits: { rpd: 1000, tpd: 100000 }, reset: 'sur 24 h glissantes',
     keyUrl: 'https://console.groq.com/keys', help: 'Ultra-rapide : parfaite pour les petites tâches et le 2e avis. Ne lit pas les photos.' },
   { id: 'openrouter', name: 'OpenRouter', full: 'OpenRouter', type: 'openai', free: true, vision: true,
@@ -33,7 +33,12 @@ export const PROVIDERS = [
 const FIRST_TOKEN_MS = 35000;
 const readSlow = () => { try { return JSON.parse(sessionStorage.getItem('sudo-slow') || '{}'); } catch { return {}; } };
 const markSlow = m => { try { const x = readSlow(); x[m] = Date.now() + 15 * 60e3; sessionStorage.setItem('sudo-slow', JSON.stringify(x)); } catch {} };
-const RETIRED = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+// Modèle Gemini dont le quota du jour est épuisé : mis de côté jusqu'à la remise à zéro (gardé même si l'app se ferme).
+const readCapped = () => { try { const x = JSON.parse(localStorage.getItem('sudo-mquota') || '{}'); for (const k in x) if (x[k] <= Date.now()) delete x[k]; return x; } catch { return {}; } };
+const markCapped = (m, until) => { try { const x = readCapped(); x[m] = until; localStorage.setItem('sudo-mquota', JSON.stringify(x)); } catch {} };
+// Le modèle principal de cette IA est à sa limite du jour (sudo passe par un autre modèle) : jusqu'à quand.
+export const cappedUntil = (id, s) => { const m = s?.providers?.[id]?.model; return (m && readCapped()[m]) || 0; };
+const RETIRED = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
 export const P = id => PROVIDERS.find(p => p.id === id);
 
 // Quelle IA pour quelle tâche (ménage les quotas) : « rapide » pour les petites tâches,
@@ -307,9 +312,10 @@ export async function callOne(id, { system, messages, onDelta = () => {}, signal
   const caller = window.__sudoDemo || CALL[p.type];
   // Modèle surchargé (503) ou retiré (404) : on essaie les autres modèles du même fournisseur.
   // Les modèles trop lents récemment passent en dernier pendant 15 minutes.
-  const slowMap = readSlow();
+  const slowMap = readSlow(), capped = readCapped();
+  const off = m => (capped[m] ? 2 : slowMap[m] > Date.now() ? 1 : 0);
   const models = [cfg.model, ...(p.alt || []).filter(m => m !== cfg.model)]
-    .sort((a, b) => (slowMap[a] > Date.now()) - (slowMap[b] > Date.now()));
+    .sort((a, b) => off(a) - off(b));
   let rl = null, used = cfg.model;
   for (const [k, model] of models.entries()) {
     // Si le modèle ne commence pas à répondre en 45 s, on passe au suivant.
@@ -325,10 +331,11 @@ export async function callOne(id, { system, messages, onDelta = () => {}, signal
     } catch (e) {
       if (slow && !signal?.aborted) { e = Object.assign(new Error(`${model} ne répond pas (surchargé ?)`), { status: 504 }); }
       if ([503, 504].includes(e.status)) markSlow(model);
+      if (e.status === 429 && p.type === 'gemini') { markCapped(model, nextReset(id)); window.dispatchEvent(new Event('usage-changed')); }
       // Chaque modèle Gemini a son propre quota : un 429 sur l'un n'empêche pas l'autre.
       const retry = [404, 500, 503, 504].includes(e.status) || (e.status === 429 && p.type === 'gemini');
       if (got || k === models.length - 1 || !retry) throw e;
-      window.dispatchEvent(new CustomEvent('ai-info', { detail: `${p.name} : ${model} ${e.status === 404 ? 'indisponible' : e.status === 429 ? 'quota atteint' : 'surchargé'}, j'essaie ${models[k + 1]}` }));
+      window.dispatchEvent(new CustomEvent('ai-info', { detail: e.status === 429 ? `${p.name} : ${model} a fini son quota du jour, je passe à ${models[k + 1]} (rien à faire)` : `${p.name} : ${model} ${e.status === 404 ? 'indisponible' : 'surchargé'}, j'essaie ${models[k + 1]}` }));
       if (e.status === 503) await new Promise(r => setTimeout(r, 800));
     } finally {
       clearTimeout(timer);
