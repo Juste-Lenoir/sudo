@@ -1,4 +1,5 @@
 // Réglages : profil, IA (clés, modèles, limites gratuites, IA par tâche), budget, sauvegarde.
+import { getLang, setLang } from '../i18n.js';
 import { getProfile, saveProfile, exportAll, importAll, clearAll } from '../store.js';
 import { PROVIDERS, TASKS, getAI, saveAI, readyProviders, testProvider, listModels } from '../ai.js';
 import { $, esc, toast, icon, download, paintIcons } from '../ui.js';
@@ -45,6 +46,11 @@ export async function settingsView(v) {
     <h1>Réglages</h1>
     <div class="stack" style="max-width:760px">
       <div class="card stack">
+        <h2 style="margin:0">Langue · Language</h2>
+        <div class="seg" style="align-self:flex-start"><button data-lang="fr" class="${getLang() === 'fr' ? 'on' : ''}">Français</button><button data-lang="en" class="${getLang() === 'en' ? 'on' : ''}">English</button></div>
+        <p class="small muted" style="margin:0" data-noi18n>${getLang() === 'en' ? 'Screens and AI answers in English. Your own content (workshops, notes) stays as you wrote it.' : 'Écrans et réponses des IA en français. Tes contenus (ateliers, fiches) restent tels que tu les as écrits.'}</p>
+      </div>
+      <div class="card stack">
         <h2 style="margin:0">Toi</h2>
         <label class="field">Prénom (pour que l'assistant te tutoie par ton prénom)<input class="input" data-prenom value="${esc(prof.prenom)}"></label>
       </div>
@@ -81,6 +87,7 @@ export async function settingsView(v) {
   paintIcons(v);
 
   const persist = async () => { await saveAI(s); };
+  v.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { if (b.dataset.lang !== getLang()) setLang(b.dataset.lang); });
   $('[data-prenom]', v).onchange = async e => { prof.prenom = e.target.value.trim(); await saveProfile(prof); toast('Enregistré'); };
   $('[data-primary]', v).onchange = async e => { s.primary = e.target.value; await persist(); };
   v.querySelectorAll('[data-route]').forEach(sel => sel.onchange = async () => { s.routes[sel.dataset.route] = sel.value; await persist(); });

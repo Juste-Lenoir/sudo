@@ -1,6 +1,7 @@
 // Connexion aux IA (gratuites et payantes) : bascule automatique, choix de l'IA selon la tâche,
 // suivi des quotas par jour. Les clés restent sur l'appareil.
 import { getKV, setKV } from './store.js';
+import { getLang } from './i18n.js';
 
 // Limites gratuites indicatives (elles changent souvent) : modifiables dans les réglages.
 export const PROVIDERS = [
@@ -357,6 +358,7 @@ export async function callOne(id, { system, messages, onDelta = () => {}, signal
 
 // ---------- Discussion avec bascule automatique ----------
 export async function chat({ system, messages, onDelta = () => {}, onInfo = () => {}, prefer, task, exclude = [], needBoxes = false, signal }) {
+  if (getLang() === 'en') system = (system || '') + '\n\nLANGUAGE: the app is set to English. Always answer in English, even if these instructions are in French (keep JSON keys and technical terms exactly as asked). Address the learner informally.';
   const s = await getAI();
   const u = await getUsage();
   let list = readyProviders(s).filter(p => !exclude.includes(p.id));

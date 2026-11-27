@@ -18,7 +18,10 @@
 </head>
 <body>
   <aside class="sidebar" aria-label="Navigation">
-    <a href="#/" class="logo side-logo" aria-label="sudo, accueil"><span class="prompt" aria-hidden="true">&gt;</span>sudo<span class="caret">_</span></a>
+    <div class="side-head">
+      <a href="#/" class="logo side-logo" aria-label="sudo, accueil"><span class="prompt" aria-hidden="true">&gt;</span>sudo<span class="caret">_</span></a>
+      <button class="icon-btn side-hide" type="button" data-side-toggle aria-label="Masquer la barre latérale" title="Masquer la barre latérale (⌘\)" data-icon="columns"></button>
+    </div>
     <nav class="side-nav">
       <a href="#/" data-path=""><i data-icon="home"></i>Aujourd'hui</a>
       <a href="#/ateliers" data-path="ateliers atelier verif rejoindre"><i data-icon="wrench"></i>Ateliers<span class="side-badge" data-badge="ateliers"></span></a>
@@ -43,7 +46,7 @@
   </aside>
   <header class="top">
     <a href="#/" class="logo" aria-label="sudo, accueil"><span class="prompt" aria-hidden="true">&gt;</span>sudo<span class="caret">_</span></a>
-    <button class="icon-btn side-toggle" id="side-toggle" type="button" aria-label="Masquer la barre latérale" title="Masquer / afficher la barre latérale (⌘\)" data-icon="columns"></button>
+    <button class="icon-btn side-toggle" type="button" data-side-toggle aria-label="Afficher la barre latérale" title="Afficher la barre latérale (⌘\)" data-icon="columns"></button>
     <button class="search-btn" id="search-btn" type="button"><span class="mono" style="color:var(--brand)">&gt;</span><span class="grow">Rechercher ou aller à…</span><kbd>⌘K</kbd></button>
     <nav class="topnav" aria-label="Navigation principale">
       <a href="#/" data-nav="accueil">Aujourd'hui</a>

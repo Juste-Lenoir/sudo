@@ -23,6 +23,7 @@ import { startSync, handleAuthHash, status as syncStatus } from './sync.js';
 import { receivedPhoto, processPendingPhotos } from './views/photo.js';
 import { reparerList, reparerNew, reparationView } from './views/reparer.js';
 import { openPalette } from './palette.js';
+import { startI18n } from './i18n.js';
 import { dbAll, getKV } from './store.js';
 import { dueToday } from './srs.js';
 import { today } from './progress.js';
@@ -111,17 +112,14 @@ $('#search-btn').addEventListener('click', openPalette);
 
 // Barre latérale : masquable (mémorisé sur l'appareil).
 const SIDE = 'sudo-side-hidden';
-const applySide = hidden => {
-  document.body.classList.toggle('side-hidden', hidden);
-  $('#side-toggle').setAttribute('aria-label', hidden ? 'Afficher la barre latérale' : 'Masquer la barre latérale');
-};
+const applySide = hidden => document.body.classList.toggle('side-hidden', hidden);
 function toggleSide() {
   const hidden = !document.body.classList.contains('side-hidden');
   try { localStorage.setItem(SIDE, hidden ? '1' : ''); } catch { /* sans stockage */ }
   applySide(hidden);
 }
 try { applySide(localStorage.getItem(SIDE) === '1'); } catch { applySide(false); }
-$('#side-toggle').addEventListener('click', toggleSide);
+$$('[data-side-toggle]').forEach(b => b.addEventListener('click', toggleSide));
 
 // Compteurs de la barre latérale.
 async function paintBadges() {
@@ -158,6 +156,7 @@ watchDiagrams();
 
 // Mode démo pour tester l'app sans clé (réponses préparées) : ajouter ?demo à l'adresse.
 if (new URLSearchParams(location.search).has('demo')) await import('../dev/demo.js');
+await startI18n();
 await startSync();
 render();
 setupReminders();

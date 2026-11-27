@@ -1,8 +1,10 @@
 // Banque de questions intégrée : quiz sans IA (hors ligne, ou quand les quotas sont épuisés).
 // Complétée par les questions de tous les quiz déjà générés.
+import { getLang } from './i18n.js';
+import { BANK_EN } from './quiz-bank-en.js';
 const Q = (domain, q, choix, bonne, explication, notion) => ({ domain, q, choix, bonne, explication, notion, illustration: null });
 
-export const BANK = [
+const BANK_FR = [
   // Matériel
   Q('materiel', 'Quel connecteur alimente la carte mère en principal ?', ['ATX 24-pin', 'EPS 8-pin', 'PCIe 6+2', 'SATA power'], 0, 'Le 24-pin ATX alimente la carte mère ; l’EPS 8-pin alimente le processeur.', 'connecteurs alimentation'),
   Q('materiel', 'Où se branche le câble EPS 8-pin ?', ['Près du socket du processeur', 'Sur la carte graphique', 'Sur le SSD', 'Sur le front panel'], 0, 'L’EPS (CPU power) se trouve en haut de la carte mère, près du socket.', 'EPS CPU'),
@@ -63,3 +65,4 @@ export const BANK = [
   Q('prog', 'En Bash, comment rendre un script exécutable ?', ['chmod +x script.sh', 'exec script.sh', 'run script.sh', 'sudo script.sh'], 0, 'chmod +x puis ./script.sh.', 'chmod +x'),
   Q('prog', 'Que fait le pipe | ?', ['Envoie la sortie d’une commande à la suivante', 'Redirige vers un fichier', 'Lance deux commandes en parallèle', 'Commente la ligne'], 0, 'commande1 | commande2 : la sortie de la première devient l’entrée de la seconde. > redirige vers un fichier.', 'pipe'),
 ];
+export const BANK = getLang() === 'en' ? BANK_EN : BANK_FR;

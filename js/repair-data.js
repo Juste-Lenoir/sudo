@@ -1,27 +1,33 @@
 // Réparer : types d'appareils, sécurité avant d'ouvrir et parcours de diagnostic hors ligne
 // (sans IA ni réseau). Chaque parcours : des questions oui/non jusqu'à une piste de réparation.
+import { getLang } from './i18n.js';
+import { LABELS_EN, safetyEN, TREES_EN } from './repair-data-en.js';
+const EN = getLang() === 'en';
 
-export const TYPES = [
+const TYPES_FR = [
   { id: 'telephone', label: 'Téléphone', icon: 'phone' },
   { id: 'tablette', label: 'Tablette', icon: 'tablet' },
   { id: 'portable', label: 'PC portable', icon: 'laptop' },
   { id: 'fixe', label: 'PC fixe', icon: 'monitor' },
   { id: 'autre', label: 'Autre', icon: 'wrench' },
 ];
+export const TYPES = EN ? TYPES_FR.map(t => ({ ...t, label: LABELS_EN.types[t.id] })) : TYPES_FR;
 export const type = id => TYPES.find(t => t.id === id) || TYPES[TYPES.length - 1];
 const mobile = t => ['telephone', 'tablette', 'portable'].includes(t);
 
-export const RESULTS = [
+const RESULTS_FR = [
   { id: 'en_cours', label: 'En cours', cls: '' },
   { id: 'repare', label: 'Réparé', cls: 'ok' },
   { id: 'piece', label: 'Pièce à commander', cls: 'mid' },
   { id: 'revenir', label: 'À revenir', cls: 'mid' },
   { id: 'pas_repare', label: 'Pas réparable', cls: 'bad' },
 ];
+export const RESULTS = EN ? RESULTS_FR.map(x => ({ ...x, label: LABELS_EN.results[x.id] })) : RESULTS_FR;
 export const result = id => RESULTS.find(r => r.id === id) || RESULTS[0];
 
 // ---- Sécurité avant d'ouvrir ----
 export function safety(t) {
+  if (EN) return safetyEN(t, mobile(t));
   const list = [
     { id: 'donnees', t: 'Données sauvegardées par le propriétaire', d: 'Ou il accepte par écrit le risque de les perdre. Une réparation peut effacer l’appareil.' },
     { id: 'verrou', t: 'Le propriétaire déverrouille lui-même', d: 'On ne contourne jamais un code, un compte (Apple, Google, Microsoft) ni un mot de passe BIOS.' },
@@ -45,7 +51,7 @@ export function safety(t) {
 
 // ---- Parcours de diagnostic ----
 // Nœud : { q, d?, oui, non } ou { fin, d, go? } (go : propose d'enchaîner sur un autre parcours).
-export const TREES = {
+const TREES_FR = {
   allume: {
     label: 'Ne s’allume plus', start: 'a1',
     n: {
@@ -121,3 +127,4 @@ export const TREES = {
     },
   },
 };
+export const TREES = EN ? TREES_EN : TREES_FR;
